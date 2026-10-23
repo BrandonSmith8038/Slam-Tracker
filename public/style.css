@@ -69,7 +69,7 @@ label.fld{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var
 .x{background:none;border:1px solid var(--line);color:var(--dim);border-radius:8px;width:36px;height:36px;cursor:pointer}.x:hover{color:var(--red2);border-color:var(--red2)}
 .err{color:#ff8b93;min-height:20px;margin-bottom:6px}
 .dlg-actions{display:flex;justify-content:flex-end;gap:10px}
-.crop{width:min(1200px,96vw);text-align:center}.crop .aspects{display:flex;gap:8px;justify-content:center;margin-bottom:12px}
+.crop{width:min(1200px,96vw);text-align:center}.crop .aspects{display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:12px}
 .stage{position:relative;display:inline-block;line-height:0;overflow:hidden;user-select:none;touch-action:none}
 .stage img{max-width:1100px;max-height:62vh;display:block}
 #sel{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.62);cursor:move}
@@ -82,3 +82,7 @@ label.fld{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var
 .badge.miss{background:rgba(181,48,58,.95);border-color:var(--red2);font-weight:700}
 .rb{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .row.behind .lbl{color:#ff8b93}
+.eb{max-width:560px;margin:18px auto}
+.cmp{display:flex;gap:16px;justify-content:center;margin-bottom:14px}.cmp figure{margin:0}
+.cmp img{height:56vh;max-width:46vw;object-fit:contain;display:block;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+.cmp figcaption{margin-top:6px;color:var(--dim);font-size:13px}

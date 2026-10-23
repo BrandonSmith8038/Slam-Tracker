@@ -11,5 +11,14 @@ services:
       - NTFY_TOPIC=               # required for notifications
       - NTFY_TOKEN=               # optional access token
       - NOTIFY_TIME=09:00         # daily time (24h, in TZ) reminders are sent
+      - UPSCALER_URL=http://upscaler:3000   # cover enhancer below; remove this line to turn enhancing off
     volumes:
       - /mnt/user/appdata/slam-tracker:/data
+
+  # Optional: AI upscaler (Real-ESRGAN on CPU) used by the cover cropper's "Enhance" option.
+  # Not published to the LAN; only slam-tracker talks to it. First build downloads ~100 MB of tools.
+  upscaler:
+    build: ./upscaler
+    container_name: slam-upscaler
+    restart: unless-stopped
+    # cpus: "4"                 # optional: cap CPU use so a slow "Best" run doesn't hog the server

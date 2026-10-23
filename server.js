@@ -11,6 +11,7 @@ const NTFY_SERVER = (process.env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/+$
 const NTFY_TOPIC = process.env.NTFY_TOPIC || '';
 const NTFY_TOKEN = process.env.NTFY_TOKEN || '';
 const NOTIFY_TIME = /^\d{1,2}:\d{2}$/.test(process.env.NOTIFY_TIME || '') ? process.env.NOTIFY_TIME : '09:00';
+const UPSCALER_URL = (process.env.UPSCALER_URL || '').replace(/\/+$/, ''); // optional cover-image enhancer container
 const LEVELS = ['Uncommon', 'Rare', 'Super Rare', 'Iconic', 'Legendary'];
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const IMG_DIR = path.join(DATA_DIR, 'images');
@@ -80,7 +81,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/images', express.static(IMG_DIR, { maxAge: '7d', immutable: true }));
 
-app.get('/api/state', (req, res) => res.json({ tz: TZ, ntfy: { configured: !!NTFY_TOPIC, notifyTime: NOTIFY_TIME }, sets: db.sets }));
+app.get('/api/state', (req, res) => res.json({ tz: TZ, ntfy: { configured: !!NTFY_TOPIC, notifyTime: NOTIFY_TIME }, enhance: !!UPSCALER_URL, sets: db.sets }));
 
 app.post('/api/sets', (req, res) => {
   const r = cleanSet(req.body || {});
@@ -112,6 +113,42 @@ app.post('/api/upload', express.raw({ type: Object.keys(IMG_TYPES), limit: '8mb'
   const name = crypto.randomUUID() + '.' + ext;
   fs.writeFileSync(path.join(IMG_DIR, name), req.body);
   res.json({ path: '/images/' + name });
+});
+
+// ---------- cover enhancement (proxy to the upscaler container) ----------
+const JOB_ID = /^[\w-]{36}$/;
+async function upscaler(res, pathAndQuery, init = {}) {
+  if (!UPSCALER_URL) { res.status(503).json({ error: 'Upscaler is not configured (UPSCALER_URL)' }); return null; }
+  try { return await fetch(UPSCALER_URL + pathAndQuery, { ...init, signal: AbortSignal.timeout(30000) }); }
+  catch (e) { res.status(502).json({ error: 'Upscaler is not reachable' }); return null; }
+}
+async function passJson(res, r) {
+  const j = await r.json().catch(() => ({}));
+  res.status(r.ok ? 200 : [400, 404, 429].includes(r.status) ? r.status : 502).json(r.ok ? j : { error: j.error || `Upscaler responded ${r.status}` });
+}
+app.post('/api/enhance', express.raw({ type: ['image/png', 'image/jpeg'], limit: '12mb' }), async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Unsupported image' });
+  const model = req.query.model === 'best' ? 'best' : 'fast';
+  const scale = Math.min(4, Math.max(2, parseInt(req.query.scale, 10) || 4));
+  const r = await upscaler(res, `/jobs?model=${model}&scale=${scale}`, { method: 'POST', headers: { 'Content-Type': req.headers['content-type'] }, body: req.body });
+  if (r) await passJson(res, r);
+});
+app.get('/api/enhance/:id', async (req, res) => {
+  if (!JOB_ID.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const r = await upscaler(res, '/jobs/' + req.params.id);
+  if (r) await passJson(res, r);
+});
+app.get('/api/enhance/:id/result', async (req, res) => {
+  if (!JOB_ID.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const r = await upscaler(res, `/jobs/${req.params.id}/result`);
+  if (!r) return;
+  if (!r.ok) return res.status(502).json({ error: 'Enhanced image not available' });
+  res.type('image/png').send(Buffer.from(await r.arrayBuffer()));
+});
+app.delete('/api/enhance/:id', async (req, res) => {
+  if (!JOB_ID.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const r = await upscaler(res, '/jobs/' + req.params.id, { method: 'DELETE' });
+  if (r) await passJson(res, r);
 });
 
 app.post('/api/ntfy/test', async (req, res) => {
@@ -167,4 +204,4 @@ async function runNotifications() {
 setInterval(() => runNotifications().catch(e => console.error(e)), 60000);
 setTimeout(() => runNotifications().catch(e => console.error(e)), 5000);
 
-app.listen(PORT, '0.0.0.0', () => console.log(`Slam Tracker on :${PORT} (tz ${TZ}, data ${DATA_DIR}, ntfy ${NTFY_TOPIC ? 'on' : 'off'})`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Slam Tracker on :${PORT} (tz ${TZ}, data ${DATA_DIR}, ntfy ${NTFY_TOPIC ? 'on' : 'off'}, enhance ${UPSCALER_URL ? 'on' : 'off'})`));

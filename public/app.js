@@ -10,7 +10,7 @@ const fmt = d => dt(d).toLocaleDateString('en-US', { weekday: 'short', month: 's
 const fmtMD = d => dt(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const fmtLeft = m => { const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60); return d ? `${d}d ${h}h left` : `${h}h ${m % 60}m left`; };
 
-let state = { sets: [], tz: 'America/Phoenix', ntfy: {} }, now = null, formOpen = false, F = null;
+let state = { sets: [], tz: 'America/Phoenix', ntfy: {}, enhance: false }, now = null, formOpen = false, F = null, enhMode = 'fast';
 
 async function api(url, method = 'GET', body) {
   const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -194,13 +194,46 @@ async function saveForm() {
   } catch (e) { err.textContent = e.message; }
 }
 
+// ---------- cover enhancement (optional upscaler container) ----------
+const ENH_MAX_INPUT = 900; // crops with a longer side than this are already big enough; skip enhancing
+const toBlob = (canvas, type, q) => new Promise(res => canvas.toBlob(res, type, q));
+// Sends the crop to the upscaler, polls until done, returns the enhanced PNG blob. ctl = { cancel, id }.
+async function enhanceCanvas(c, mode, ctl, onPct) {
+  const long = Math.max(c.width, c.height);
+  const scale = mode === 'best' ? 4 : Math.min(4, Math.max(2, Math.ceil(1000 / long)));
+  const r = await fetch(`/api/enhance?model=${mode}&scale=${scale}`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: await toBlob(c, 'image/png') });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Enhance failed');
+  ctl.id = j.id;
+  if (ctl.cancel) { api('/api/enhance/' + j.id, 'DELETE').catch(() => {}); throw new Error('cancelled'); }
+  for (;;) {
+    await new Promise(res => setTimeout(res, 1200));
+    if (ctl.cancel) throw new Error('cancelled');
+    const s = await api('/api/enhance/' + j.id);
+    if (s.status === 'error') throw new Error(s.error || 'Enhance failed');
+    onPct(s.progress || 0);
+    if (s.status === 'done') break;
+  }
+  const rr = await fetch(`/api/enhance/${j.id}/result`);
+  if (!rr.ok) throw new Error('Could not fetch the enhanced image');
+  return rr.blob();
+}
+async function shrinkToJpeg(blob, maxSide) {
+  const bmp = await createImageBitmap(blob), s = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
+  return toBlob(c, 'image/jpeg', .92);
+}
+
 // ---------- image cropper ----------
 function openCropper(file) {
   return new Promise(resolve => {
     const ASPECTS = [['1:1 (matches cards)', 1], ['4:3', 4 / 3], ['16:9', 16 / 9], ['Free', null]];
+    const ENH = [['none', 'Off'], ['fast', 'Fast (seconds)'], ['best', 'Best (minutes)']];
     const box = $('#modal2'), url = URL.createObjectURL(file);
     box.innerHTML = `<div class="dialog crop"><h2>Crop cover image</h2>
       <div class="aspects">${ASPECTS.map((a, i) => `<button type="button" class="btn sm ${i ? '' : 'on'}" data-i="${i}">${a[0]}</button>`).join('')}</div>
+      ${state.enhance ? `<div class="aspects"><span class="hint">Enhance after crop:</span>${ENH.map(([k, l]) => `<button type="button" class="btn sm ${k === enhMode ? 'on' : ''}" data-e="${k}">${l}</button>`).join('')}</div>` : ''}
       <div class="stage"><img id="cimg" alt=""><div id="sel"><b data-h="nw"></b><b data-h="ne"></b><b data-h="sw"></b><b data-h="se"></b></div></div>
       <p class="hint">Drag the box to move it, drag the corner dots to resize.</p>
       <div class="dlg-actions"><button type="button" class="btn" id="c-cancel">Cancel</button><button type="button" class="btn primary" id="c-ok">Use crop</button></div></div>`;
@@ -218,6 +251,10 @@ function openCropper(file) {
     box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
       box.querySelectorAll('[data-i]').forEach(x => x.classList.remove('on')); b.classList.add('on');
       ratio = ASPECTS[b.dataset.i][1]; init();
+    });
+    box.querySelectorAll('[data-e]').forEach(b => b.onclick = () => {
+      box.querySelectorAll('[data-e]').forEach(x => x.classList.remove('on')); b.classList.add('on');
+      enhMode = b.dataset.e;
     });
     sel.onpointerdown = e => {
       e.preventDefault(); sel.setPointerCapture(e.pointerId);
@@ -239,12 +276,41 @@ function openCropper(file) {
     };
     sel.onpointerup = () => { drag = null; };
     const done = blob => { box.classList.add('hidden'); box.innerHTML = ''; URL.revokeObjectURL(url); resolve(blob); };
-    $('#c-cancel', box).onclick = () => done(null);
-    $('#c-ok', box).onclick = () => {
-      const k = img.naturalWidth / W, sw = r.w * k, sh = r.h * k, s = Math.min(1, 1400 / sw);
-      const c = document.createElement('canvas'); c.width = Math.round(sw * s); c.height = Math.round(sh * s);
+    // the crop at native pixels (shrunk only if longer than maxSide)
+    const grab = maxSide => {
+      const k = img.naturalWidth / W, sw = r.w * k, sh = r.h * k, s = Math.min(1, maxSide / Math.max(sw, sh));
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(sw * s)); c.height = Math.max(1, Math.round(sh * s));
       c.getContext('2d').drawImage(img, r.x * k, r.y * k, sw, sh, 0, 0, c.width, c.height);
-      c.toBlob(done, 'image/jpeg', .92);
+      return c;
+    };
+    $('#c-cancel', box).onclick = () => done(null);
+    $('#c-ok', box).onclick = async () => {
+      const plain = await toBlob(grab(1400), 'image/jpeg', .92), src = grab(2000);
+      if (!state.enhance || enhMode === 'none') return done(plain);
+      if (Math.max(src.width, src.height) >= ENH_MAX_INPUT) { toast('Crop is already high resolution - enhancement skipped'); return done(plain); }
+      const ctl = { cancel: false, id: null };
+      const shell = (inner, wire) => {
+        box.innerHTML = `<div class="dialog crop"><h2>Enhance cover</h2>${inner}</div>`;
+        Object.entries(wire || {}).forEach(([id, fn]) => { $('#' + id, box).onclick = fn; });
+      };
+      shell(`<p class="hint">Enhancing (${enhMode === 'best' ? 'best quality - this can take a few minutes' : 'fast'})…</p>
+        <div class="bar eb"><div class="fill" id="e-fill" style="width:0%;background:var(--red)"></div><span class="num" id="e-pct">0%</span></div>
+        <div class="dlg-actions"><button type="button" class="btn" id="e-cancel">Cancel</button></div>`,
+        { 'e-cancel': () => { ctl.cancel = true; if (ctl.id) api('/api/enhance/' + ctl.id, 'DELETE').catch(() => {}); done(null); } });
+      try {
+        const out = await enhanceCanvas(src, enhMode, ctl, p => {
+          const f = $('#e-fill', box); if (f) { f.style.width = p + '%'; $('#e-pct', box).textContent = Math.round(p) + '%'; }
+        });
+        const better = await shrinkToJpeg(out, 1400), after = URL.createObjectURL(better), before = src.toDataURL('image/png');
+        const fin = blob => { URL.revokeObjectURL(after); done(blob); };
+        shell(`<div class="cmp"><figure><img src="${before}" alt=""><figcaption>Original crop</figcaption></figure><figure><img src="${after}" alt=""><figcaption>Enhanced</figcaption></figure></div>
+          <div class="dlg-actions"><button type="button" class="btn" id="e-no">Cancel</button><button type="button" class="btn" id="e-orig">Use original</button><button type="button" class="btn primary" id="e-use">Use enhanced</button></div>`,
+          { 'e-no': () => fin(null), 'e-orig': () => fin(plain), 'e-use': () => fin(better) });
+      } catch (e) {
+        if (ctl.cancel) return;
+        shell(`<p class="err">${esc(e.message)}</p><div class="dlg-actions"><button type="button" class="btn" id="e-no">Cancel</button><button type="button" class="btn primary" id="e-orig">Use original crop</button></div>`,
+          { 'e-no': () => done(null), 'e-orig': () => done(plain) });
+      }
     };
   });
 }
