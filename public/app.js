@@ -3,6 +3,11 @@ const LEVELS = ['Uncommon', 'Rare', 'Super Rare', 'Iconic', 'Legendary'];
 const COLORS = { Uncommon: '#76ad5b', Rare: '#4b86c4', 'Super Rare': '#9366c9', Iconic: '#c2453c', Legendary: '#c9973a' };
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const TYPES = { longterm: 'Long-term', weekly: 'Weekly drops', daily: 'Daily drops' };
+const ICON = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  dup: ICON('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>'),
+  edit: ICON('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>')
+};
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dt = d => new Date(d + 'T12:00:00');
@@ -56,7 +61,7 @@ function card(s, expired) {
   return `<article class="${cls}"><div class="cover" ${s.cover ? `style="background-image:url('${esc(s.cover)}')"` : ''}>
     <div class="badges">${badges}</div><div class="ttl"><h3>${esc(s.name)}</h3><div class="meta ${urgent ? 'hot' : ''}">${meta}</div></div></div>
     <div class="rows">${rows}</div>
-    <div class="foot"><button class="btn sm" data-act="dup" data-set="${s.id}">Duplicate</button>${expired ? '' : `<button class="btn sm" data-act="edit" data-set="${s.id}">Edit</button>`}</div></article>`;
+    <div class="foot"><button class="btn sm icon" data-act="dup" data-set="${s.id}" title="Duplicate" aria-label="Duplicate">${ICONS.dup}</button>${expired ? '' : `<button class="btn sm icon" data-act="edit" data-set="${s.id}" title="Edit" aria-label="Edit">${ICONS.edit}</button>`}</div></article>`;
 }
 
 function render() {
@@ -141,10 +146,10 @@ function drawForm() {
     <div class="fld"><span>Cover image</span><div class="cov"><div class="covprev" style="${F.preview ? `background-image:url('${F.preview}')` : ''}"></div><button type="button" class="btn" data-f="pick">${F.preview ? 'Replace…' : 'Upload…'}</button><input type="file" id="f-file" accept="image/*" hidden></div></div>
     <div class="fld"><span>Levels to chase</span>${lv}</div>
     <div class="err" id="f-err"></div>
-    <div class="dlg-actions"><button type="button" class="btn" data-f="cancel">Cancel</button><button type="button" class="btn primary" data-f="save">Save set</button></div></div>`;
+    <div class="dlg-actions">${F.mode === 'edit' ? `<button type="button" class="btn danger" data-f="delete">${F.confirmDel ? 'Click again to delete for good' : 'Delete set'}</button>` : ''}<button type="button" class="btn" data-f="cancel">Cancel</button><button type="button" class="btn primary" data-f="save">Save set</button></div></div>`;
   $('#modal').classList.remove('hidden');
 }
-$('#modal').addEventListener('click', e => {
+$('#modal').addEventListener('click', async e => {
   const t = e.target.closest('[data-f]'); if (!t || !F) return;
   syncForm();
   const k = t.dataset.f, v = t.dataset.v;
@@ -161,6 +166,11 @@ $('#modal').addEventListener('click', e => {
   } else if (k === 'pick') $('#f-file').click();
   else if (k === 'cancel') closeForm();
   else if (k === 'save') saveForm();
+  else if (k === 'delete') {
+    if (!F.confirmDel) { F.confirmDel = true; drawForm(); return; } // first click arms it, second deletes
+    try { await api('/api/sets/' + F.id, 'DELETE'); closeForm(); await load(); toast('Set deleted'); }
+    catch (err) { F.confirmDel = false; drawForm(); $('#f-err').textContent = err.message; }
+  }
 });
 $('#modal').addEventListener('change', async e => {
   if (!F) return;

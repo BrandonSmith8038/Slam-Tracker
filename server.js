@@ -96,6 +96,17 @@ app.put('/api/sets/:id', (req, res) => {
   if (r.error) return res.status(400).json(r);
   db.sets[db.sets.indexOf(s)] = r.set; save(); res.json(r.set);
 });
+app.delete('/api/sets/:id', (req, res) => {
+  const s = getSet(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Set not found' });
+  if (locked(s)) return res.status(403).json({ error: 'Expired sets are read-only' });
+  db.sets.splice(db.sets.indexOf(s), 1);
+  for (const k of Object.keys(db.notified)) if (k.startsWith(s.id + ':')) delete db.notified[k];
+  save();
+  // remove the cover file too, unless another set (e.g. a duplicate) still uses it
+  if (s.cover && !db.sets.some(o => o.cover === s.cover)) fs.rm(path.join(IMG_DIR, path.basename(s.cover)), { force: true }, () => {});
+  res.json({ ok: true });
+});
 app.post('/api/sets/:id/items/:itemId', (req, res) => {
   const s = getSet(req.params.id);
   const it = s && s.items.find(i => i.id === req.params.itemId);

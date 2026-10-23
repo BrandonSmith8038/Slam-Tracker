@@ -1,6 +1,6 @@
 # Slam Tracker - Handoff
 
-Last updated: 2026-10-23 (version 0.4.0 - 0.3.1 was approved and committed by the user; 0.4.0 adds optional AI cover enhancement and is awaiting the user's test)
+Last updated: 2026-10-23 (version 0.4.1 - 0.4.0 optional AI cover enhancement was tested and approved by the user; 0.4.1 adds set delete in the Edit dialog and icon-only Edit/Duplicate buttons, awaiting the user's test)
 
 ## What it does
 LAN-only web dashboard (Docker on Unraid) for tracking progress in the Topps Slam trading card game. The user creates a "set" when it is released, chooses which rarity levels/variations to chase, and logs cards as they are collected. The dashboard shows Active sets (soonest end first) and Expired sets (muted, read-only), with progress bars, countdowns, and ntfy reminders. Used only on a 27" 1440p desktop monitor; no login, no mobile layout.
@@ -32,7 +32,7 @@ Second container (`upscaler/`, optional): `ubuntu:24.04` + distro `nodejs` (no n
 Long-term: `endDate` is user-entered. Daily/weekly: the user enters a start date (and release weekday for weekly); the number of drops equals the largest `total` among the set's items (a 12-card set runs 12 weeks) and `endDate` is derived (daily: last drop date; weekly: last drop + 6 days). Older records may still contain `got` on slots; it is ignored. A corrupt `data.json` is renamed to `data.json.corrupt-<ts>` on startup rather than overwritten.
 
 ## API
-`GET /api/state` (now includes `enhance: true|false`); `POST /api/sets`; `PUT /api/sets/:id`; `POST /api/sets/:id/items/:itemId` ({delta} or {value}); `POST /api/upload` (raw png/jpeg/webp body); `POST /api/ntfy/test`. Item route returns the updated set. Expired sets reject edits/progress with 403.
+`GET /api/state` (now includes `enhance: true|false`); `POST /api/sets`; `PUT /api/sets/:id`; `DELETE /api/sets/:id` (404 unknown, 403 expired; also clears that set's `notified` keys and deletes its cover file unless another set still uses the same cover); `POST /api/sets/:id/items/:itemId` ({delta} or {value}); `POST /api/upload` (raw png/jpeg/webp body); `POST /api/ntfy/test`. Item route returns the updated set. Expired sets reject edits/progress with 403.
 
 Enhance (proxied to the upscaler, 503 if `UPSCALER_URL` is unset, 502 if unreachable): `POST /api/enhance?model=fast|best&scale=2..4` (raw PNG/JPEG body, <= 12 MB) -> `{id}` (429 if the upscaler is busy, 400 for a bad image); `GET /api/enhance/:id` -> `{status: running|done|error, progress 0-100, error}`; `GET /api/enhance/:id/result` -> PNG; `DELETE /api/enhance/:id` cancels/discards. Upscaler's own API is the same under `/jobs` plus `/health`; finished jobs are dropped after 20 minutes.
 
@@ -51,19 +51,19 @@ Enhance flow: in the cropper, "Use crop" grabs the crop at native pixels; if enh
 - ntfy: weekly -> on release day if behind on any chased item and set incomplete; long-term -> daily from 5 days before the end date through the end date listing missing cards, skipped if complete; daily -> none. Sent once per day after `NOTIFY_TIME`; only logged as sent if ntfy accepted it. Uses ntfy's JSON publish API.
 - Level colors: Uncommon green, Rare blue, Super Rare purple, Iconic red, Legendary gold. Completed bars use a different, muted green with a checkmark.
 - Editing: item ids are preserved so progress survives edits; removing a level/variation deletes its progress. Saving a daily/weekly set recalculates slots and `endDate` from the start date, release day and the largest item total.
-- Expired sets are read-only, cannot be deleted or edited (Duplicate is allowed).
+- Expired sets are read-only, cannot be deleted or edited (Duplicate is allowed). Active sets can be deleted from the Edit dialog (button on the left of the dialog actions; first click turns it into "Click again to delete for good", second click deletes). Card footer Edit/Duplicate are icon-only (inline SVGs in `ICONS` in `app.js`, with title/aria-label tooltips).
 
 ## Verified
-- (0.4.0 enhance feature has NOT yet been seen by the user; see the sandbox list below)
+- By the user: 0.4.0 Enhance tested in their real setup; both Fast and Best worked (Best took about a minute on their server, and they plan to mostly use Best), so the Docker build of `upscaler/` and the UI flow are confirmed working
+- NOT yet seen by the user: 0.4.1 delete button and icon buttons (sandbox-tested only: API delete incl. shared-cover/404/403 cases; jsdom confirms icon-only buttons, delete shown only in Edit mode, two-click confirm sends DELETE and closes the dialog)
 - By the user (real Firefox, 27" monitor): the user reported everything is good through 0.3.1. They viewed screenshots of the weekly card (missing badge, 0.2 layout) and the edit modal, uploaded and cropped a cover, edited a weekly set, and approved the card shape/size, diamond-plate texture and modal size after the final tweaks. Exactly which other scenarios they exercised is not known.
 - By Claude in a sandbox (scratch scripts, NOT saved in the repo): JS syntax checks; API for long-term/weekly/daily creation (slots and derived end dates), validation errors, +1 clamped at item total, expired sets return 403, image upload/retrieval; ntfy messages against a local fake ntfy server (long-term 2 days left, weekly release day); headless DOM (jsdom) render of the real front end with no JS errors
 - By Claude in a sandbox for 0.4.0: `realesrgan-ncnn-vulkan` runs with lavapipe on a 1-core CPU. On the user's 249x249 sample: `realesr-animevideov3` 4x took ~15 s and looks crisper but a bit painterly; `realesrgan-x4plus` looks best (keeps texture) but took ~170 s for just a 130x80 crop (estimated ~19 min for the full image) on that 1 core. End-to-end through the real app server + upscaler server (run directly with node, not in Docker): start job, busy 429, progress 0->50->100, result PNG at 4x size, bad-image 400, cancel kills the process, unconfigured app returns 503 and `enhance:false`; jsdom: cropper shows Off/Fast/Best buttons and toggles, cancel resolves null, no JS errors
 
 ## NOT verified
-- The 0.4.0 Enhance UI in a real browser (progress bar, before/after dialog, Use enhanced/original, cancel mid-run, error path); canvas export/`createImageBitmap` steps were not exercised in jsdom
-- The `upscaler/Dockerfile` has never been built (Docker is not available in the sandbox): apt package names, the GitHub release download, the model copy globs, and lavapipe ICD discovery inside `ubuntu:24.04` are untested; `docker compose up --build` on Unraid is the first real test
-- Speed of Fast/Best on the user's real CPU (no GPU on the server); Best may be many minutes. The 45 min job timeout is a guess
-- Whether enhanced covers actually look better on the user's real phone screenshots, especially ones with small text (AI upscalers can invent texture)
+- Enhance edge cases the user may not have hit: cancel mid-run, the error path, crops >= 900px, upscaler container down, very small crops
+- Whether enhanced covers look good on text-heavy screenshots (AI upscalers can invent texture)
+- Visual look of the new icon buttons and the Delete button styling in a real browser
 - Real ntfy delivery to the user's phone/computer (the Test ntfy button's result was never reported back)
 - Behavior across a real day rollover, container restart, or a set actually expiring
 - Docker/Unraid deployment details beyond the user running it on port 8187 (they changed the port because 8099 was taken)
@@ -76,7 +76,7 @@ Enhance flow: in the cropper, "Use crop" grabs the crop at native pixels; if enh
 - Covers cropped before 0.3.0 (5:2) are center-cropped on the portrait cards; re-crop via Edit > Replace
 - Saving an existing weekly set recalculates its end date (last drop + 6 days), which may differ from a previously typed end date
 - Replaced covers are not deleted from `images/` (orphans accumulate)
-- No delete, no editing of expired sets (by design); a mistyped past end date can only be fixed by duplicating
+- Delete exists only in the Edit dialog, so expired sets (no Edit button, API returns 403) cannot be deleted or edited by design; a mistyped past end date can only be fixed by duplicating. Allowing delete for expired sets was raised as an open question
 - No per-card tracking, no auth, no snooze/quiet hours
 
 ## Modifying safely
@@ -98,5 +98,6 @@ Enhance flow: in the cropper, "Use crop" grabs the crop at native pixels; if enh
 ## Next planned tasks
 - Get the user's test results for 0.4.0 (build the two containers, try Fast and Best on a real phone screenshot) and fix whatever the first Docker build or UI test turns up; then give them a commit message when they approve
 - If Best is too slow on their CPU: consider a smaller/faster model, a `cpus` limit tradeoff, or making Fast the only option
-- Smaller candidates noted earlier: cleanup of orphaned images (replaced covers), delete/archive for expired sets
+- Get the user's test result for 0.4.1 (delete flow, icons) and give a commit message when they approve
+- Smaller candidates: cleanup of orphaned images (covers replaced during edits are still never deleted), allow delete/archive for expired sets
 - The user mentioned wanting to build a larger feature in a new chat; its scope is still not defined in this file (ask them)

@@ -3,7 +3,7 @@
 A small LAN-only dashboard for tracking set progress in the Topps Slam trading card game. Runs as a Docker container (built for Unraid) and serves a dark, desktop-oriented web page.
 
 ## Features
-- Create/edit/duplicate sets: name, cover image (upload + crop, optional AI enhance), levels to chase (Uncommon, Rare, Super Rare, Iconic, Legendary), optional variations per level, card total per variation/level
+- Create/edit/duplicate/delete sets (card footer has Duplicate and Edit icon buttons; Delete is inside the Edit dialog and asks for a second click to confirm; expired sets can't be edited or deleted): name, cover image (upload + crop, optional AI enhance), levels to chase (Uncommon, Rare, Super Rare, Iconic, Legendary), optional variations per level, card total per variation/level
 - Set types: **Long-term** (has an end date), **Weekly drops** (start date + release weekday; runs one week per card) and **Daily drops** (start date; runs one day per card). The length is the biggest card total among the chased levels/variations
 - Portrait trading-card-shaped cards in a grid on a subtle diamond-plate background, with Active (soonest end first) and Expired (muted, read-only) sections
 - Progress bars with centered `owned/total`, +1/-1 buttons, muted green + check when complete, and overall set progress (completed bars / chased bars)

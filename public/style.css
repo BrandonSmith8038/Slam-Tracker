@@ -86,3 +86,5 @@ label.fld{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var
 .cmp{display:flex;gap:16px;justify-content:center;margin-bottom:14px}.cmp figure{margin:0}
 .cmp img{height:56vh;max-width:46vw;object-fit:contain;display:block;background:var(--bg);border:1px solid var(--line);border-radius:8px}
 .cmp figcaption{margin-top:6px;color:var(--dim);font-size:13px}
+.btn.icon{display:inline-grid;place-items:center;padding:6px 9px}.btn.icon svg{width:16px;height:16px;display:block}
+.btn.danger{margin-right:auto;background:transparent;border-color:#6b2a30;color:#ff8b93}.btn.danger:hover{background:#3a1a1e;border-color:var(--red2)}
