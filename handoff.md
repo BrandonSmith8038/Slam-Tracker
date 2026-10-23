@@ -1,6 +1,6 @@
 # Slam Tracker - Handoff
 
-Last updated: 2026-10-23 (version 0.4.1 - 0.4.0 optional AI cover enhancement was tested and approved by the user; 0.4.1 adds set delete in the Edit dialog and icon-only Edit/Duplicate buttons, awaiting the user's test)
+Last updated: 2026-10-23 (version 0.4.2 - 0.4.0 AI cover enhancement and 0.4.1 delete-in-Edit-dialog/icon buttons were tested and approved by the user; 0.4.2 adds automatic deletion of expired sets beyond the newest 15, awaiting the user's test)
 
 ## What it does
 LAN-only web dashboard (Docker on Unraid) for tracking progress in the Topps Slam trading card game. The user creates a "set" when it is released, chooses which rarity levels/variations to chase, and logs cards as they are collected. The dashboard shows Active sets (soonest end first) and Expired sets (muted, read-only), with progress bars, countdowns, and ntfy reminders. Used only on a 27" 1440p desktop monitor; no login, no mobile layout.
@@ -42,6 +42,7 @@ The browser loads `/api/state` (refreshes every 60s and on tab focus), renders e
 Enhance flow: in the cropper, "Use crop" grabs the crop at native pixels; if enhancing is on (Off/Fast/Best buttons, default Fast, remembered per page load in `enhMode`) and the crop's long side is under 900px, the PNG is posted to `/api/enhance`, the dialog shows a progress bar (polls every 1.2s) with Cancel, then a before/after comparison with Use enhanced / Use original / Cancel. The chosen image is shrunk to <= 1400px JPEG (.92) like before and held until the set form is saved (same upload path as before). Errors offer "Use original crop". Fast picks scale 2-4 so output is about 1000px; Best always runs 4x.
 
 ## Key decisions / behavior
+- Auto-prune (0.4.2): `pruneExpired()` in `server.js` runs once at startup and every 10 minutes. It keeps the newest `KEEP_EXPIRED` expired sets (default 15; sorted by `endDate` desc, then `createdAt` desc, matching the dashboard's Expired order) and deletes the rest via `removeSets()` (also used by the delete route), which removes the sets, their `notified` keys, and cover files not used by any remaining set. `KEEP_EXPIRED=off` (or any non-number) disables it, `0` deletes all expired sets. Deletion is permanent and happens on the first startup after upgrading if the user already has more than 15 expired sets.
 - Expiry: a set is expired when today (in `TZ`) is after its `endDate`. Default TZ `America/Phoenix`.
 - Progress counts unique cards per chased level/variation (no per-card tracking). Overall = completed bars / chased bars. Every set must chase at least one level.
 - Daily/weekly sets: the drops ARE the cards of the chased level/variation (there is no separate drop bar or per-drop chips). Cards you should have by now = drops released so far (capped at the item total); if owned is lower a red "N missing" badge (sum across items; tooltip lists which) shows in the card's top-right corner and the behind rows get a reddish label. The card shows "X weeks/days remaining" (drops whose availability window hasn't closed; daily window = that day, weekly = release day + 6) instead of an end date.
@@ -55,7 +56,8 @@ Enhance flow: in the cropper, "Use crop" grabs the crop at native pixels; if enh
 
 ## Verified
 - By the user: 0.4.0 Enhance tested in their real setup; both Fast and Best worked (Best took about a minute on their server, and they plan to mostly use Best), so the Docker build of `upscaler/` and the UI flow are confirmed working
-- NOT yet seen by the user: 0.4.1 delete button and icon buttons (sandbox-tested only: API delete incl. shared-cover/404/403 cases; jsdom confirms icon-only buttons, delete shown only in Edit mode, two-click confirm sends DELETE and closes the dialog)
+- By the user: 0.4.1 delete button (Edit dialog) and icon-only Edit/Duplicate buttons work and look good
+- NOT yet seen by the user: 0.4.2 auto-prune of expired sets (sandbox-tested only: crafted data.json with 6 expired sets + 1 active, run with KEEP_EXPIRED=3 -> the 3 oldest removed with their notified keys and images, a cover shared with a kept set was kept, tie on end date broken by newer createdAt; default 15 and `off` prune nothing; 0 prunes all expired; the 10-minute timer itself was not observed)
 - By the user (real Firefox, 27" monitor): the user reported everything is good through 0.3.1. They viewed screenshots of the weekly card (missing badge, 0.2 layout) and the edit modal, uploaded and cropped a cover, edited a weekly set, and approved the card shape/size, diamond-plate texture and modal size after the final tweaks. Exactly which other scenarios they exercised is not known.
 - By Claude in a sandbox (scratch scripts, NOT saved in the repo): JS syntax checks; API for long-term/weekly/daily creation (slots and derived end dates), validation errors, +1 clamped at item total, expired sets return 403, image upload/retrieval; ntfy messages against a local fake ntfy server (long-term 2 days left, weekly release day); headless DOM (jsdom) render of the real front end with no JS errors
 - By Claude in a sandbox for 0.4.0: `realesrgan-ncnn-vulkan` runs with lavapipe on a 1-core CPU. On the user's 249x249 sample: `realesr-animevideov3` 4x took ~15 s and looks crisper but a bit painterly; `realesrgan-x4plus` looks best (keeps texture) but took ~170 s for just a 130x80 crop (estimated ~19 min for the full image) on that 1 core. End-to-end through the real app server + upscaler server (run directly with node, not in Docker): start job, busy 429, progress 0->50->100, result PNG at 4x size, bad-image 400, cancel kills the process, unconfigured app returns 503 and `enhance:false`; jsdom: cropper shows Off/Fast/Best buttons and toggles, cancel resolves null, no JS errors
@@ -76,7 +78,7 @@ Enhance flow: in the cropper, "Use crop" grabs the crop at native pixels; if enh
 - Covers cropped before 0.3.0 (5:2) are center-cropped on the portrait cards; re-crop via Edit > Replace
 - Saving an existing weekly set recalculates its end date (last drop + 6 days), which may differ from a previously typed end date
 - Replaced covers are not deleted from `images/` (orphans accumulate)
-- Delete exists only in the Edit dialog, so expired sets (no Edit button, API returns 403) cannot be deleted or edited by design; a mistyped past end date can only be fixed by duplicating. Allowing delete for expired sets was raised as an open question
+- Expired sets cannot be edited or manually deleted (no Edit button, API returns 403); they are removed automatically once outside the newest 15. A mistyped past end date can only be fixed by duplicating (do it before the set expires or while it is still among the newest 15)
 - No per-card tracking, no auth, no snooze/quiet hours
 
 ## Modifying safely
@@ -98,6 +100,6 @@ Enhance flow: in the cropper, "Use crop" grabs the crop at native pixels; if enh
 ## Next planned tasks
 - Get the user's test results for 0.4.0 (build the two containers, try Fast and Best on a real phone screenshot) and fix whatever the first Docker build or UI test turns up; then give them a commit message when they approve
 - If Best is too slow on their CPU: consider a smaller/faster model, a `cpus` limit tradeoff, or making Fast the only option
-- Get the user's test result for 0.4.1 (delete flow, icons) and give a commit message when they approve
-- Smaller candidates: cleanup of orphaned images (covers replaced during edits are still never deleted), allow delete/archive for expired sets
+- Get the user's test result for 0.4.2 and give a commit message when they approve
+- Smaller candidates: cleanup of orphaned images (covers replaced during edits are still never deleted; auto-prune only removes covers of pruned sets)
 - The user mentioned wanting to build a larger feature in a new chat; its scope is still not defined in this file (ask them)

@@ -3,7 +3,7 @@
 A small LAN-only dashboard for tracking set progress in the Topps Slam trading card game. Runs as a Docker container (built for Unraid) and serves a dark, desktop-oriented web page.
 
 ## Features
-- Create/edit/duplicate/delete sets (card footer has Duplicate and Edit icon buttons; Delete is inside the Edit dialog and asks for a second click to confirm; expired sets can't be edited or deleted): name, cover image (upload + crop, optional AI enhance), levels to chase (Uncommon, Rare, Super Rare, Iconic, Legendary), optional variations per level, card total per variation/level
+- Create/edit/duplicate/delete sets (card footer has Duplicate and Edit icon buttons; Delete is inside the Edit dialog and asks for a second click to confirm; expired sets can't be edited or deleted by hand; see Expired sets below): name, cover image (upload + crop, optional AI enhance), levels to chase (Uncommon, Rare, Super Rare, Iconic, Legendary), optional variations per level, card total per variation/level
 - Set types: **Long-term** (has an end date), **Weekly drops** (start date + release weekday; runs one week per card) and **Daily drops** (start date; runs one day per card). The length is the biggest card total among the chased levels/variations
 - Portrait trading-card-shaped cards in a grid on a subtle diamond-plate background, with Active (soonest end first) and Expired (muted, read-only) sections
 - Progress bars with centered `owned/total`, +1/-1 buttons, muted green + check when complete, and overall set progress (completed bars / chased bars)
@@ -38,9 +38,13 @@ npm start        # http://localhost:3000, data in ./data
 | `NTFY_TOPIC` | _(empty)_ | Topic to publish to; notifications are off if empty |
 | `NTFY_TOKEN` | _(empty)_ | Optional bearer token |
 | `NOTIFY_TIME` | `09:00` | Time of day (24h, in `TZ`) reminders are sent |
+| `KEEP_EXPIRED` | `15` | How many expired sets to keep (newest by end date); older ones are deleted automatically along with their cover image. A number (0 = delete every expired set), or `off` to never delete |
 | `UPSCALER_URL` | _(empty)_ | URL of the upscaler container (compose sets `http://upscaler:3000`); Enhance is off if empty |
 
 Upscaler container (`upscaler/`): `JOB_TIMEOUT_MIN` (default 45) kills a stuck job; `PORT` (3000).
+
+## Expired sets
+Once a set has ended it moves to the Expired section. The app keeps only the newest `KEEP_EXPIRED` (default 15, by end date) and permanently deletes older expired sets, their sent-notification records, and their cover image (unless another set still uses that image). Checked at startup and every 10 minutes. This cannot be undone, so back up `DATA_DIR` if you care about old sets.
 
 ## Cover enhance
 In the cover cropper choose **Off**, **Fast** or **Best** before clicking *Use crop*.

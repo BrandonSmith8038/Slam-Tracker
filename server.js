@@ -11,6 +11,8 @@ const NTFY_SERVER = (process.env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/+$
 const NTFY_TOPIC = process.env.NTFY_TOPIC || '';
 const NTFY_TOKEN = process.env.NTFY_TOKEN || '';
 const NOTIFY_TIME = /^\d{1,2}:\d{2}$/.test(process.env.NOTIFY_TIME || '') ? process.env.NOTIFY_TIME : '09:00';
+const KE = process.env.KEEP_EXPIRED; // how many expired sets to keep (newest by end date); older ones are deleted. -1 = never delete
+const KEEP_EXPIRED = KE === undefined || KE === '' ? 15 : /^\d+$/.test(KE) ? +KE : -1;
 const UPSCALER_URL = (process.env.UPSCALER_URL || '').replace(/\/+$/, ''); // optional cover-image enhancer container
 const LEVELS = ['Uncommon', 'Rare', 'Super Rare', 'Iconic', 'Legendary'];
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
@@ -38,6 +40,24 @@ function save() { // atomic write
 load();
 const getSet = id => db.sets.find(s => s.id === id);
 const locked = s => D.isExpired(s, D.nowParts(TZ).date);
+
+// Deletes sets, their sent-notification records, and their cover files (unless another set still uses the same cover).
+function removeSets(list) {
+  if (!list.length) return;
+  const covers = new Set(list.map(s => s.cover).filter(Boolean));
+  db.sets = db.sets.filter(s => !list.includes(s));
+  for (const k of Object.keys(db.notified)) if (list.some(s => k.startsWith(s.id + ':'))) delete db.notified[k];
+  save();
+  for (const c of covers) if (!db.sets.some(o => o.cover === c)) fs.rm(path.join(IMG_DIR, path.basename(c)), { force: true }, () => {});
+}
+// Keeps only the newest KEEP_EXPIRED expired sets (by end date, then creation time) and deletes the rest.
+function pruneExpired() {
+  if (KEEP_EXPIRED < 0) return;
+  const today = D.nowParts(TZ).date;
+  const expired = db.sets.filter(s => D.isExpired(s, today)).sort((a, b) => b.endDate.localeCompare(a.endDate) || (b.createdAt || 0) - (a.createdAt || 0));
+  const drop = expired.slice(KEEP_EXPIRED);
+  if (drop.length) { removeSets(drop); console.log(`Pruned ${drop.length} expired set(s) beyond the newest ${KEEP_EXPIRED}: ${drop.map(s => s.name).join(', ')}`); }
+}
 
 // ---------- validation ----------
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -100,11 +120,7 @@ app.delete('/api/sets/:id', (req, res) => {
   const s = getSet(req.params.id);
   if (!s) return res.status(404).json({ error: 'Set not found' });
   if (locked(s)) return res.status(403).json({ error: 'Expired sets are read-only' });
-  db.sets.splice(db.sets.indexOf(s), 1);
-  for (const k of Object.keys(db.notified)) if (k.startsWith(s.id + ':')) delete db.notified[k];
-  save();
-  // remove the cover file too, unless another set (e.g. a duplicate) still uses it
-  if (s.cover && !db.sets.some(o => o.cover === s.cover)) fs.rm(path.join(IMG_DIR, path.basename(s.cover)), { force: true }, () => {});
+  removeSets([s]);
   res.json({ ok: true });
 });
 app.post('/api/sets/:id/items/:itemId', (req, res) => {
@@ -213,6 +229,8 @@ async function runNotifications() {
   if (changed) save();
 }
 setInterval(() => runNotifications().catch(e => console.error(e)), 60000);
+pruneExpired();
+setInterval(() => { try { pruneExpired(); } catch (e) { console.error(e); } }, 10 * 60000);
 setTimeout(() => runNotifications().catch(e => console.error(e)), 5000);
 
-app.listen(PORT, '0.0.0.0', () => console.log(`Slam Tracker on :${PORT} (tz ${TZ}, data ${DATA_DIR}, ntfy ${NTFY_TOPIC ? 'on' : 'off'}, enhance ${UPSCALER_URL ? 'on' : 'off'})`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Slam Tracker on :${PORT} (tz ${TZ}, data ${DATA_DIR}, ntfy ${NTFY_TOPIC ? 'on' : 'off'}, enhance ${UPSCALER_URL ? 'on' : 'off'}, keep expired ${KEEP_EXPIRED < 0 ? 'all' : KEEP_EXPIRED})`));
