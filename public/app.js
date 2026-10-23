@@ -1,0 +1,254 @@
+const D = SlamDates;
+const LEVELS = ['Uncommon', 'Rare', 'Super Rare', 'Iconic', 'Legendary'];
+const COLORS = { Uncommon: '#76ad5b', Rare: '#4b86c4', 'Super Rare': '#9366c9', Iconic: '#c2453c', Legendary: '#c9973a' };
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const TYPES = { longterm: 'Long-term', weekly: 'Weekly drops', daily: 'Daily drops' };
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const dt = d => new Date(d + 'T12:00:00');
+const fmt = d => dt(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+const fmtMD = d => dt(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtLeft = m => { const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60); return d ? `${d}d ${h}h left` : `${h}h ${m % 60}m left`; };
+
+let state = { sets: [], tz: 'America/Phoenix', ntfy: {} }, now = null, formOpen = false, F = null;
+
+async function api(url, method = 'GET', body) {
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+let toastT;
+function toast(msg, bad) {
+  const t = $('#toast'); t.textContent = msg; t.className = 'show' + (bad ? ' bad' : '');
+  clearTimeout(toastT); toastT = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+// ---------- dashboard ----------
+async function load() { state = await api('/api/state'); render(); }
+
+function bar(label, color, owned, total, ctl, cls = '', miss = 0) {
+  if (miss) cls += ' behind';
+  const done = total > 0 && owned >= total;
+  const pct = total ? Math.min(100, owned / total * 100) : 0;
+  return `<div class="row ${cls} ${done ? 'done' : ''}"><div class="lbl" title="${esc(label)}">${color ? `<i style="background:${color}"></i>` : ''}${esc(label)}</div>
+    <div class="bar"><div class="fill" style="width:${pct}%;${done || !color ? '' : 'background:' + color}"></div><span class="num">${done ? '✓ ' : ''}${owned}/${total}</span></div>${ctl}</div>`;
+}
+
+function card(s, expired) {
+  const prog = D.progress(s), mins = D.minutesLeft(s, now), timed = s.type !== 'longterm', weekly = s.type === 'weekly';
+  const urgent = !expired && !prog.complete && mins < 1440;
+  const rel = !expired && weekly ? s.slots.find(x => x.date === now.date) : null;
+  const caughtUp = s.items.every(i => D.itemMissing(s, i, now.date) === 0);
+  const cls = ['card', expired && 'expired', prog.complete && 'complete', urgent && 'urgent', rel && 'release'].filter(Boolean).join(' ');
+  let meta;
+  if (expired) meta = `Ended ${fmt(s.endDate)}`;
+  else if (timed) { const n = D.remaining(s, now.date); meta = `${n} ${weekly ? 'week' : 'day'}${n === 1 ? '' : 's'} remaining`; }
+  else meta = `Ends ${fmt(s.endDate)} · ${fmtLeft(mins)}`;
+  const ctl = id => expired ? '<div></div>' : `<div class="ctl"><button data-act="dec" data-set="${s.id}" data-item="${id}">−</button><button data-act="inc" data-set="${s.id}" data-item="${id}">+</button></div>`;
+  const rows = bar('Overall', '', prog.done, prog.total, '<div></div>', 'overall') +
+    s.items.map(i => bar(i.level + (i.variation ? ' · ' + i.variation : ''), COLORS[i.level], i.owned, i.total, ctl(i.id), '', D.itemMissing(s, i, now.date))).join('');
+  const behind = s.items.reduce((n, i) => n + D.itemMissing(s, i, now.date), 0);
+  const tip = s.items.filter(i => D.itemMissing(s, i, now.date)).map(i => `${i.level}${i.variation ? ' ' + i.variation : ''}: ${D.itemMissing(s, i, now.date)}`).join(', ');
+  const right = (prog.complete ? '<span class="badge ok">✓ Complete</span>' : rel ? `<span class="badge rel">${caughtUp ? 'Collected today ✓' : 'NEW CARD TODAY'}</span>` : '') +
+    (behind ? `<span class="badge miss" title="${esc(tip)}">${behind} missing</span>` : '');
+  const badges = `<span class="badge">${TYPES[s.type]}${weekly ? ' · ' + DAYS[s.releaseDay] + 's' : ''}</span><div class="rb">${right}</div>`;
+  return `<article class="${cls}"><div class="cover" ${s.cover ? `style="background-image:url('${esc(s.cover)}')"` : ''}>
+    <div class="badges">${badges}</div><div class="ttl"><h3>${esc(s.name)}</h3><div class="meta ${urgent ? 'hot' : ''}">${meta}</div></div></div>
+    <div class="rows">${rows}</div>
+    <div class="foot"><button class="btn sm" data-act="dup" data-set="${s.id}">Duplicate</button>${expired ? '' : `<button class="btn sm" data-act="edit" data-set="${s.id}">Edit</button>`}</div></article>`;
+}
+
+function render() {
+  now = D.nowParts(state.tz);
+  const exp = s => D.isExpired(s, now.date);
+  const active = state.sets.filter(s => !exp(s)).sort((a, b) => a.endDate.localeCompare(b.endDate) || a.name.localeCompare(b.name));
+  const expired = state.sets.filter(exp).sort((a, b) => b.endDate.localeCompare(a.endDate));
+  const todo = active.filter(s => !D.progress(s).complete);
+  const soon = todo.filter(s => D.minutesLeft(s, now) < 3 * 1440).length;
+  $('#stats').innerHTML = [['Running', active.length, ''], ['Need to finish', todo.length, ''], ['Completed', active.length - todo.length, 'ok'], ['Ending ≤ 3 days', soon, soon ? 'hot' : '']]
+    .map(([l, n, c]) => `<div class="stat ${c}"><b>${n}</b><span>${l}</span></div>`).join('');
+  $('#activeCount').textContent = active.length; $('#expiredCount').textContent = expired.length;
+  $('#active').innerHTML = active.map(s => card(s, false)).join('') || '<div class="empty">No active sets. Click “+ New Set” to add one.</div>';
+  $('#expired').innerHTML = expired.map(s => card(s, true)).join('') || '<div class="empty">Nothing expired yet.</div>';
+}
+const find = id => state.sets.find(s => s.id === id);
+function replace(set) { state.sets[state.sets.findIndex(s => s.id === set.id)] = set; render(); }
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const { act, set: id } = b.dataset;
+  try {
+    if (act === 'inc' || act === 'dec') replace(await api(`/api/sets/${id}/items/${b.dataset.item}`, 'POST', { delta: act === 'inc' ? 1 : -1 }));
+    else if (act === 'edit') openForm(find(id), 'edit');
+    else if (act === 'dup') openForm(find(id), 'dup');
+  } catch (err) { toast(err.message, true); load(); }
+});
+$('#newSet').onclick = () => openForm(null, 'new');
+$('#testNtfy').onclick = async () => {
+  try { await api('/api/ntfy/test', 'POST', {}); toast('Test notification sent'); } catch (e) { toast(e.message, true); }
+};
+
+// ---------- set form ----------
+function openForm(set, mode) {
+  formOpen = true;
+  const levels = {};
+  LEVELS.forEach(l => { levels[l] = { on: false, total: '', id: null, vars: [] }; });
+  if (set) set.items.forEach(i => {
+    const L = levels[i.level], id = mode === 'edit' ? i.id : null;
+    L.on = true;
+    if (i.variation) L.vars.push({ id, name: i.variation, total: i.total }); else { L.total = i.total; L.id = id; }
+  });
+  F = {
+    mode, id: mode === 'edit' ? set.id : null, name: set ? (mode === 'dup' ? set.name + ' (copy)' : set.name) : '',
+    type: set ? set.type : 'longterm', startDate: mode === 'edit' && set.startDate ? set.startDate : now.date,
+    endDate: mode === 'edit' ? set.endDate : '', releaseDay: set && set.releaseDay != null ? set.releaseDay : 1,
+    levels, cover: set ? set.cover : '', preview: set ? set.cover : '', blob: null
+  };
+  drawForm();
+}
+function closeForm() {
+  if (F && F.preview.startsWith('blob:')) URL.revokeObjectURL(F.preview);
+  formOpen = false; F = null; $('#modal').classList.add('hidden'); $('#modal').innerHTML = '';
+}
+function syncForm() {
+  const m = $('#modal'); if (!F || !$('#f-name', m)) return;
+  F.name = $('#f-name', m).value;
+  if ($('#f-end', m)) F.endDate = $('#f-end', m).value;
+  if ($('#f-start', m)) F.startDate = $('#f-start', m).value;
+  if ($('#f-rel', m)) F.releaseDay = +$('#f-rel', m).value;
+  m.querySelectorAll('[data-total]').forEach(i => { F.levels[i.dataset.total].total = i.value; });
+  m.querySelectorAll('[data-vname]').forEach(i => { const [l, n] = i.dataset.vname.split(':'); F.levels[l].vars[n].name = i.value; });
+  m.querySelectorAll('[data-vtotal]').forEach(i => { const [l, n] = i.dataset.vtotal.split(':'); F.levels[l].vars[n].total = i.value; });
+}
+function drawForm() {
+  const lv = LEVELS.map(l => {
+    const L = F.levels[l]; let body = '';
+    if (L.on) body = L.vars.length
+      ? `<div class="vars">${L.vars.map((v, i) => `<div class="var"><input placeholder="Variation (e.g. Chrome Green)" maxlength="60" data-vname="${l}:${i}" value="${esc(v.name)}"><input type="number" min="1" placeholder="Cards" data-vtotal="${l}:${i}" value="${esc(v.total)}"><button type="button" class="x" data-f="delvar" data-v="${l}:${i}">✕</button></div>`).join('')}<button type="button" class="btn sm" data-f="addvar" data-v="${l}">+ Add variation</button></div>`
+      : `<div class="var"><input type="number" min="1" placeholder="Cards in set" data-total="${l}" value="${esc(L.total)}"><button type="button" class="btn sm" data-f="addvar" data-v="${l}">+ Add variations</button></div>`;
+    return `<div class="lvl ${L.on ? 'on' : ''}"><label class="lh"><input type="checkbox" data-lvl="${l}" ${L.on ? 'checked' : ''}><i style="background:${COLORS[l]}"></i>${l}</label>${body}</div>`;
+  }).join('');
+  $('#modal').innerHTML = `<div class="dialog"><h2>${F.mode === 'edit' ? 'Edit set' : F.mode === 'dup' ? 'New set (copied)' : 'New set'}</h2>
+    <label class="fld">Set name<input id="f-name" maxlength="100" placeholder="e.g. Royal Rumble" value="${esc(F.name)}"></label>
+    <div class="fld"><span>Set type</span><div class="seg">${Object.keys(TYPES).map(k => `<button type="button" class="${F.type === k ? 'on' : ''}" data-f="type" data-v="${k}">${TYPES[k]}</button>`).join('')}</div></div>
+    <div class="dates">
+      ${F.type !== 'longterm' ? `<label class="fld">Starts<input type="date" id="f-start" value="${F.startDate}"></label>` : ''}
+      ${F.type === 'weekly' ? `<label class="fld">Release day<select id="f-rel">${DAYS.map((d, i) => `<option value="${i}" ${F.releaseDay === i ? 'selected' : ''}>${d}</option>`).join('')}</select></label>` : ''}
+      ${F.type === 'longterm' ? `<label class="fld">End date<input type="date" id="f-end" value="${F.endDate}"></label>` : ''}
+    </div>
+    ${F.type !== 'longterm' ? `<p class="hint">Runs one ${F.type === 'weekly' ? 'week' : 'day'} per card (the biggest card total below sets the length). If you're adding this late, set Starts to the date the first card dropped.</p>` : ''}
+    <div class="fld"><span>Cover image</span><div class="cov"><div class="covprev" style="${F.preview ? `background-image:url('${F.preview}')` : ''}"></div><button type="button" class="btn" data-f="pick">${F.preview ? 'Replace…' : 'Upload…'}</button><input type="file" id="f-file" accept="image/*" hidden></div></div>
+    <div class="fld"><span>Levels to chase</span>${lv}</div>
+    <div class="err" id="f-err"></div>
+    <div class="dlg-actions"><button type="button" class="btn" data-f="cancel">Cancel</button><button type="button" class="btn primary" data-f="save">Save set</button></div></div>`;
+  $('#modal').classList.remove('hidden');
+}
+$('#modal').addEventListener('click', e => {
+  const t = e.target.closest('[data-f]'); if (!t || !F) return;
+  syncForm();
+  const k = t.dataset.f, v = t.dataset.v;
+  if (k === 'type') { F.type = v; drawForm(); }
+  else if (k === 'addvar') {
+    const L = F.levels[v];
+    if (!L.vars.length) { L.vars.push({ id: L.id, name: '', total: L.total }); L.id = null; L.total = ''; }
+    else L.vars.push({ id: null, name: '', total: '' });
+    drawForm();
+  } else if (k === 'delvar') {
+    const [l, n] = v.split(':'), L = F.levels[l], [rem] = L.vars.splice(+n, 1);
+    if (!L.vars.length) { L.id = rem.id; L.total = rem.total; }
+    drawForm();
+  } else if (k === 'pick') $('#f-file').click();
+  else if (k === 'cancel') closeForm();
+  else if (k === 'save') saveForm();
+});
+$('#modal').addEventListener('change', async e => {
+  if (!F) return;
+  if (e.target.dataset.lvl) { syncForm(); F.levels[e.target.dataset.lvl].on = e.target.checked; drawForm(); }
+  else if (e.target.id === 'f-file' && e.target.files[0]) {
+    syncForm();
+    const blob = await openCropper(e.target.files[0]);
+    if (blob) { if (F.preview.startsWith('blob:')) URL.revokeObjectURL(F.preview); F.blob = blob; F.preview = URL.createObjectURL(blob); }
+    drawForm();
+  }
+});
+async function saveForm() {
+  syncForm();
+  const err = $('#f-err'); err.textContent = '';
+  const items = [];
+  for (const l of LEVELS) {
+    const L = F.levels[l]; if (!L.on) continue;
+    if (L.vars.some(v => !v.name.trim())) { err.textContent = `Name every ${l} variation`; return; }
+    if (L.vars.length) L.vars.forEach(v => items.push({ id: v.id, level: l, variation: v.name, total: v.total }));
+    else items.push({ id: L.id, level: l, variation: '', total: L.total });
+  }
+  try {
+    let cover = F.cover;
+    if (F.blob) {
+      const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': F.blob.type }, body: F.blob });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error); cover = j.path;
+    }
+    const body = { name: F.name, type: F.type, startDate: F.startDate, endDate: F.endDate, releaseDay: F.releaseDay, cover, items };
+    await (F.id ? api('/api/sets/' + F.id, 'PUT', body) : api('/api/sets', 'POST', body));
+    closeForm(); await load(); toast('Set saved');
+  } catch (e) { err.textContent = e.message; }
+}
+
+// ---------- image cropper ----------
+function openCropper(file) {
+  return new Promise(resolve => {
+    const ASPECTS = [['1:1 (matches cards)', 1], ['4:3', 4 / 3], ['16:9', 16 / 9], ['Free', null]];
+    const box = $('#modal2'), url = URL.createObjectURL(file);
+    box.innerHTML = `<div class="dialog crop"><h2>Crop cover image</h2>
+      <div class="aspects">${ASPECTS.map((a, i) => `<button type="button" class="btn sm ${i ? '' : 'on'}" data-i="${i}">${a[0]}</button>`).join('')}</div>
+      <div class="stage"><img id="cimg" alt=""><div id="sel"><b data-h="nw"></b><b data-h="ne"></b><b data-h="sw"></b><b data-h="se"></b></div></div>
+      <p class="hint">Drag the box to move it, drag the corner dots to resize.</p>
+      <div class="dlg-actions"><button type="button" class="btn" id="c-cancel">Cancel</button><button type="button" class="btn primary" id="c-ok">Use crop</button></div></div>`;
+    box.classList.remove('hidden');
+    const img = $('#cimg', box), sel = $('#sel', box), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    let W, H, ratio = ASPECTS[0][1], r = { x: 0, y: 0, w: 0, h: 0 }, drag = null;
+    const draw = () => Object.assign(sel.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+    function init() {
+      if (ratio) { let w = W * .9, h = w / ratio; if (h > H * .9) { h = H * .9; w = h * ratio; } r = { w, h, x: (W - w) / 2, y: (H - h) / 2 }; }
+      else r = { x: W * .05, y: H * .05, w: W * .9, h: H * .9 };
+      draw();
+    }
+    img.onload = () => { W = img.clientWidth; H = img.clientHeight; init(); };
+    img.src = url;
+    box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
+      box.querySelectorAll('[data-i]').forEach(x => x.classList.remove('on')); b.classList.add('on');
+      ratio = ASPECTS[b.dataset.i][1]; init();
+    });
+    sel.onpointerdown = e => {
+      e.preventDefault(); sel.setPointerCapture(e.pointerId);
+      const h = e.target.dataset.h;
+      drag = h ? { h, ax: h.includes('w') ? r.x + r.w : r.x, ay: h.includes('n') ? r.y + r.h : r.y } : { sx: e.clientX, sy: e.clientY, ox: r.x, oy: r.y };
+    };
+    sel.onpointermove = e => {
+      if (!drag) return;
+      if (!drag.h) { r.x = clamp(drag.ox + e.clientX - drag.sx, 0, W - r.w); r.y = clamp(drag.oy + e.clientY - drag.sy, 0, H - r.h); }
+      else {
+        const b = img.getBoundingClientRect(), px = clamp(e.clientX - b.left, 0, W), py = clamp(e.clientY - b.top, 0, H);
+        let w = Math.abs(px - drag.ax), h = Math.abs(py - drag.ay);
+        if (ratio) { if (w / Math.max(h, 1) > ratio) w = h * ratio; else h = w / ratio; }
+        w = Math.max(w, 24); h = ratio ? w / ratio : Math.max(h, 24);
+        r.w = w; r.h = h;
+        r.x = clamp(px < drag.ax ? drag.ax - w : drag.ax, 0, W - w); r.y = clamp(py < drag.ay ? drag.ay - h : drag.ay, 0, H - h);
+      }
+      draw();
+    };
+    sel.onpointerup = () => { drag = null; };
+    const done = blob => { box.classList.add('hidden'); box.innerHTML = ''; URL.revokeObjectURL(url); resolve(blob); };
+    $('#c-cancel', box).onclick = () => done(null);
+    $('#c-ok', box).onclick = () => {
+      const k = img.naturalWidth / W, sw = r.w * k, sh = r.h * k, s = Math.min(1, 1400 / sw);
+      const c = document.createElement('canvas'); c.width = Math.round(sw * s); c.height = Math.round(sh * s);
+      c.getContext('2d').drawImage(img, r.x * k, r.y * k, sw, sh, 0, 0, c.width, c.height);
+      c.toBlob(done, 'image/jpeg', .92);
+    };
+  });
+}
+
+load().catch(e => toast(e.message, true));
+setInterval(() => { if (!formOpen) load().catch(() => {}); }, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !formOpen) load().catch(() => {}); });

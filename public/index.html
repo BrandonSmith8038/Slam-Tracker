@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slam Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">S</span><h1>Slam Tracker</h1></div>
+  <div class="stats" id="stats"></div>
+  <div class="actions">
+    <button class="btn ghost" id="testNtfy">Test ntfy</button>
+    <button class="btn primary" id="newSet">+ New Set</button>
+  </div>
+</header>
+<main>
+  <h2 class="sec">Active <small id="activeCount"></small></h2>
+  <div class="grid" id="active"></div>
+  <h2 class="sec">Expired <small id="expiredCount"></small></h2>
+  <div class="grid" id="expired"></div>
+</main>
+<div id="modal" class="modal hidden"></div>
+<div id="modal2" class="modal hidden" style="z-index:30"></div>
+<div id="toast"></div>
+<script src="dates.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

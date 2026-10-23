@@ -1,0 +1,15 @@
+services:
+  slam-tracker:
+    build: .
+    container_name: slam-tracker
+    restart: unless-stopped
+    ports:
+      - "8187:3000"
+    environment:
+      - TZ=America/Phoenix        # timezone used for "end of day" expiry and notification time
+      - NTFY_SERVER=https://ntfy.sh   # or your self-hosted ntfy URL
+      - NTFY_TOPIC=               # required for notifications
+      - NTFY_TOKEN=               # optional access token
+      - NOTIFY_TIME=09:00         # daily time (24h, in TZ) reminders are sent
+    volumes:
+      - /mnt/user/appdata/slam-tracker:/data
