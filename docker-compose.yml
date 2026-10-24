@@ -7,11 +7,10 @@ services:
       - "8187:3000"
     environment:
       - TZ=America/Phoenix        # timezone used for "end of day" expiry and notification time
-      - NTFY_SERVER=https://ntfy.sh   # or your self-hosted ntfy URL
-      - NTFY_TOPIC=               # required for notifications
-      - NTFY_TOKEN=               # optional access token
+      - NTFY_SERVER=${NTFY_SERVER:-https://ntfy.sh}
+      - NTFY_TOPIC=${NTFY_TOPIC:-}   # set in .env (not committed)
+      - NTFY_TOKEN=${NTFY_TOKEN:-}   # set in .env (not committed)
       - NOTIFY_TIME=09:00         # daily time (24h, in TZ) reminders are sent
-      - UPSCALER_URL=http://upscaler:3000   # cover enhancer below; remove this line to turn enhancing off
     volumes:
       - /mnt/user/appdata/slam-tracker:/data
 
