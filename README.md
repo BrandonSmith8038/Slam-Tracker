@@ -4,7 +4,7 @@ A small LAN-only dashboard for tracking set progress in the Topps Slam trading c
 
 ## Features
 - Create/edit/duplicate/delete sets (card footer has Duplicate and Edit icon buttons; Delete is inside the Edit dialog and asks for a second click to confirm; expired sets can't be edited or deleted by hand; see Expired sets below): name, cover image (upload + crop, optional AI enhance), levels to chase (Uncommon, Rare, Super Rare, Iconic, Legendary), optional variations per level, card total per variation/level
-- Set types: **Long-term** (has an end date), **Weekly drops** (start date + release weekday; runs one week per card) and **Daily drops** (start date; runs one day per card). The length is the biggest card total among the chased levels/variations
+- Set types: **Long-term** (you enter the days remaining, as the game shows it, and the app works out the end date), **Weekly drops** (start date + release weekday; runs one week per card) and **Daily drops** (start date; runs one day per card). For weekly/daily sets the length is the biggest card total among the chased levels/variations
 - Portrait trading-card-shaped cards in a grid on a subtle diamond-plate background, with Active (soonest end first) and Expired (muted, read-only) sections
 - Progress bars with centered `owned/total`, +1/-1 buttons, muted green + check when complete, and overall set progress (completed bars / chased bars)
 - Daily/weekly sets show "X weeks/days remaining" and show an "N missing" badge in the card's top-right corner when you have fewer cards than drops released so far
@@ -14,34 +14,41 @@ A small LAN-only dashboard for tracking set progress in the Topps Slam trading c
 
 ## Run with Docker
 ```bash
+cp .env.example .env     # then edit .env and set NTFY_TOPIC (and NTFY_TOKEN if you use one)
 docker compose up -d --build
 ```
-Then open `http://<server-ip>:8187`. Edit `docker-compose.yml` first to set `NTFY_TOPIC` and your appdata path.
+Then open `http://<server-ip>:8187`. Edit `docker-compose.yml` first to set your appdata path.
 
-The compose file starts two containers: `slam-tracker` (the app) and `slam-upscaler` (the optional enhancer, built from `./upscaler`; the first build downloads the Real-ESRGAN tools). To run without the enhancer, delete the `upscaler` service and the `UPSCALER_URL` line; the Enhance option then disappears from the cropper.
+Your ntfy settings live in `.env` (next to `docker-compose.yml`). That file is gitignored and dockerignored, so your topic is never committed. Compose reads it automatically and fills in the `${NTFY_...}` values in `docker-compose.yml`. Only `.env.example` (blank values) is in the repo. On public ntfy.sh the topic name acts like a password, so use a long random one and don't share it.
 
-On Unraid you can use the Compose Manager plugin with this compose file, or `docker build -t slam-tracker .` and add the container manually (port 3000, path `/mnt/user/appdata/slam-tracker` -> `/data`, plus the variables below).
+The compose file starts two containers: `slam-tracker` (the app) and `slam-upscaler` (the optional enhancer, built from `./upscaler`; the first build downloads the Real-ESRGAN tools). The app talks to the enhancer through `UPSCALER_URL=http://upscaler:3000`, which must be set in the `slam-tracker` service's `environment` in `docker-compose.yml`. To run without the enhancer, delete the `upscaler` service and the `UPSCALER_URL` line; the Enhance option then disappears from the cropper.
+
+On Unraid you can use the Compose Manager plugin with this compose file (put `.env` in the stack's folder, or use the stack's env file option), or `docker build -t slam-tracker .` and add the container manually (port 3000, path `/mnt/user/appdata/slam-tracker` -> `/data`, plus the variables below).
 
 ## Run locally
 ```bash
 npm install
 npm start        # http://localhost:3000, data in ./data
 ```
+When running locally, `.env` is not read by Node; export the variables in your shell (for example `NTFY_TOPIC=mytopic npm start`).
 
 ## Configuration (environment variables)
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `3000` | Port inside the container |
 | `DATA_DIR` | `/data` (Docker) / `./data` | Where `data.json` and `images/` live |
-| `TZ` | `America/Phoenix` | Timezone for end-of-day expiry and notification time |
+| `TZ` | `America/Phoenix` | Timezone for end-of-day expiry, "days remaining" and notification time |
 | `NTFY_SERVER` | `https://ntfy.sh` | ntfy server URL |
-| `NTFY_TOPIC` | _(empty)_ | Topic to publish to; notifications are off if empty |
-| `NTFY_TOKEN` | _(empty)_ | Optional bearer token |
-| `NOTIFY_TIME` | `09:00` | Time of day (24h, in `TZ`) reminders are sent |
+| `NTFY_TOPIC` | _(empty)_ | Topic to publish to; notifications are off if empty. With Docker, set it in `.env`, not in `docker-compose.yml` |
+| `NTFY_TOKEN` | _(empty)_ | Optional bearer token. With Docker, set it in `.env` |
+| `NOTIFY_TIME` | `09:00` | Time of day (24h, in `TZ`) reminders are sent (set in `docker-compose.yml`) |
 | `KEEP_EXPIRED` | `15` | How many expired sets to keep (newest by end date); older ones are deleted automatically along with their cover image. A number (0 = delete every expired set), or `off` to never delete |
-| `UPSCALER_URL` | _(empty)_ | URL of the upscaler container (compose sets `http://upscaler:3000`); Enhance is off if empty |
+| `UPSCALER_URL` | _(empty)_ | URL of the upscaler container (`http://upscaler:3000` with the compose file); Enhance is off if empty |
 
 Upscaler container (`upscaler/`): `JOB_TIMEOUT_MIN` (default 45) kills a stuck job; `PORT` (3000).
+
+## Long-term sets and "days remaining"
+The form asks for **Days remaining** (the number the game shows), not an end date. When you save, the app stores the end date as today plus that many days, in the configured timezone, and the set stays active through the end of that day. Entering `0` means it ends today. When you edit a set, the field is pre-filled with the days left until its current end date, so saving without changing it keeps the same end date.
 
 ## Expired sets
 Once a set has ended it moves to the Expired section. The app keeps only the newest `KEEP_EXPIRED` (default 15, by end date) and permanently deletes older expired sets, their sent-notification records, and their cover image (unless another set still uses that image). Checked at startup and every 10 minutes. This cannot be undone, so back up `DATA_DIR` if you care about old sets.

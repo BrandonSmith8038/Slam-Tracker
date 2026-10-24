@@ -11,6 +11,7 @@ services:
       - NTFY_TOPIC=${NTFY_TOPIC:-}   # set in .env (not committed)
       - NTFY_TOKEN=${NTFY_TOKEN:-}   # set in .env (not committed)
       - NOTIFY_TIME=09:00         # daily time (24h, in TZ) reminders are sent
+      - UPSCALER_URL=http://upscaler:3000
     volumes:
       - /mnt/user/appdata/slam-tracker:/data
 

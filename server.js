@@ -78,7 +78,9 @@ function cleanSet(b, existing) {
   if (!items.length) return err('Choose at least one level to chase');
   let startDate = null, releaseDay = null, slots = [], endDate = b.endDate;
   if (type === 'longterm') {
-    if (!DATE_RE.test(endDate || '')) return err('End date is required');
+    const days = parseInt(b.daysLeft, 10);
+    if (!(days >= 0 && days <= 3650)) return err('Enter the days remaining');
+    endDate = D.addDays(D.nowParts(TZ).date, days);
   } else {
     startDate = b.startDate;
     if (!DATE_RE.test(startDate || '')) return err('Start date is required');
