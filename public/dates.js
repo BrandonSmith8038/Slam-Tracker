@@ -33,8 +33,10 @@
     return e > set.endDate ? set.endDate : e;
   }
   const released = (set, today) => set.type === 'longterm' ? 0 : set.slots.filter(s => s.date <= today).length;
-  // Cards you should have by now for a chased item in a daily/weekly set (one per released drop) minus what you own
-  const itemMissing = (set, item, today) => set.type === 'longterm' ? 0 : Math.max(0, Math.min(item.total, released(set, today)) - item.owned);
+  // Cards released per drop (daily/weekly sets); older sets have no perDrop and drop one card at a time
+  const perDrop = set => set.perDrop || 1;
+  // Cards you should have by now for a chased item in a daily/weekly set (perDrop per released drop) minus what you own
+  const itemMissing = (set, item, today) => set.type === 'longterm' ? 0 : Math.max(0, Math.min(item.total, released(set, today) * perDrop(set)) - item.owned);
   const remaining = (set, today) => set.slots.filter(s => windowEnd(set, s) >= today).length;
   // Each chased level/variation is one bar; overall = completed bars / bars.
   function progress(set) {
@@ -42,5 +44,5 @@
     return { done, total: set.items.length, complete: set.items.length > 0 && done === set.items.length };
   }
   const missing = set => set.items.filter(i => i.owned < i.total).map(i => `${label(i)} (${i.total - i.owned} more)`);
-  return { label, nowParts, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, itemMissing, remaining, progress, missing };
+  return { label, nowParts, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, itemMissing, remaining, progress, missing };
 });

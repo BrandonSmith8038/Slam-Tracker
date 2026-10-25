@@ -1,6 +1,6 @@
 # Slam Tracker - Handoff
 
-Last updated: 2026-10-24 (version 0.4.4). Change log since the last handoff: 0.4.3 moved the ntfy settings out of `docker-compose.yml` into a gitignored `.env` (new `.env.example`); 0.4.4 changed the long-term set form to take "days remaining" instead of an end date. Both were tested and approved by the user. 0.4.2 (automatic deletion of expired sets beyond the newest 15) is still awaiting the user's test. `package.json` still says version 0.1.0 (it is not kept in sync with these labels).
+Last updated: 2026-10-24 (version 0.4.5). Change log since the last handoff: 0.4.5 added a "Cards per drop" field for daily/weekly sets (the user hit a daily set that drops 2 cards per day; awaiting the user's test); the compose file regained `UPSCALER_URL` (it had gone missing and Enhance had disappeared; the user re-added it and Enhance came back); 0.4.3 moved the ntfy settings out of `docker-compose.yml` into a gitignored `.env` (new `.env.example`); 0.4.4 changed the long-term set form to take "days remaining" instead of an end date. 0.4.3 and 0.4.4 were tested and approved by the user. 0.4.2 (automatic deletion of expired sets beyond the newest 15) is still awaiting the user's test. `package.json` still says version 0.1.0 (it is not kept in sync with these labels).
 
 ## What it does
 LAN-only web dashboard (Docker on Unraid) for tracking progress in the Topps Slam trading card game. The user creates a "set" when it is released, chooses which rarity levels/variations to chase, and logs cards as they are collected. The dashboard shows Active sets (soonest end first) and Expired sets (muted, read-only), with progress bars, countdowns, and ntfy reminders. Used only on a 27" 1440p desktop monitor; no login, no mobile layout.
@@ -22,7 +22,7 @@ Second container (`upscaler/`, optional): `ubuntu:24.04` + distro `nodejs` (no n
 ## Configuration and secrets
 - The ntfy server, topic and token come from `.env` (copied from `.env.example`, sits next to `docker-compose.yml`). `docker-compose.yml` references them as `${NTFY_SERVER:-https://ntfy.sh}`, `${NTFY_TOPIC:-}`, `${NTFY_TOKEN:-}`, so nothing sensitive is committed. Notifications stay off when `NTFY_TOPIC` is empty. On Unraid Compose Manager, `.env` must live in the stack folder (or be set through the stack's env file option).
 - Other settings are plain environment variables on the `slam-tracker` service: `TZ` (default America/Phoenix), `NOTIFY_TIME` (set to 09:00 in the compose file), `PORT`, `DATA_DIR` (`/data` in Docker), `KEEP_EXPIRED` (default 15; number, 0 = delete all expired, any non-number such as `off` = never delete), `UPSCALER_URL` (enables Enhance).
-- **Check:** the `docker-compose.yml` last seen in this project does NOT set `UPSCALER_URL` or `KEEP_EXPIRED` on `slam-tracker`. Without `UPSCALER_URL` (`http://upscaler:3000`) the app reports `enhance: false` and the Enhance option is hidden. The user tested Enhance successfully in 0.4.0, so their real deployment probably sets it; confirm against their actual file before changing anything.
+- `UPSCALER_URL=http://upscaler:3000` must be set on the `slam-tracker` service in `docker-compose.yml`; without it the app reports `enhance: false` and the Enhance option is hidden. It had gone missing from the compose file at some point (unknown when or how) and the user re-added it, which brought Enhance back. `KEEP_EXPIRED` is not set in the compose file (default 15 applies).
 - If the ntfy topic was ever pushed to GitHub in an earlier commit, the user was advised to rotate it (public ntfy.sh topics act like passwords). Whether they did is not known.
 
 ## Data model (`DATA_DIR/data.json`)
@@ -30,17 +30,18 @@ Second container (`upscaler/`, optional): `ubuntu:24.04` + distro `nodejs` (no n
 { sets: [ { id, name, type: 'longterm'|'weekly'|'daily', startDate|null, endDate 'YYYY-MM-DD',
             releaseDay 0-6|null (weekly), cover '/images/<uuid>.jpg'|'', createdAt,
             items: [ { id, level, variation ('' if none), total, owned } ],
-            slots: [ { date } ]   // daily/weekly only: one per drop, built from startDate (+ releaseDay)
+            slots: [ { date } ],  // daily/weekly only: one per drop, built from startDate (+ releaseDay)
+            perDrop 1-20 (daily/weekly: cards released per drop; absent on older sets = 1)
           } ],
   notified: { '<setId>:<date>:<release|ending>': true }  // pruned after 30 days
 }
 ```
-Long-term: the stored `endDate` is derived by the server at save time as today (in `TZ`) + the `daysLeft` the form sends (0 to 3650); the form never sends a date. Daily/weekly: the user enters a start date (and release weekday for weekly); the number of drops equals the largest `total` among the set's items (a 12-card set runs 12 weeks) and `endDate` is derived (daily: last drop date; weekly: last drop + 6 days). Older records may still contain `got` on slots; it is ignored. A corrupt `data.json` is renamed to `data.json.corrupt-<ts>` on startup rather than overwritten. The data shape did not change in 0.4.3 or 0.4.4, so no migration was needed.
+Long-term: the stored `endDate` is derived by the server at save time as today (in `TZ`) + the `daysLeft` the form sends (0 to 3650); the form never sends a date. Daily/weekly: the user enters a start date (and release weekday for weekly) and `perDrop` (cards per drop, default 1); the number of drops is `ceil(largest item total / perDrop)` (a 12-card weekly set at 1 per drop runs 12 weeks; a 14-card daily set at 2 per drop runs 7 days) and `endDate` is derived (daily: last drop date; weekly: last drop + 6 days). Older sets without `perDrop` are treated as 1, so no migration was needed. Older records may still contain `got` on slots; it is ignored. A corrupt `data.json` is renamed to `data.json.corrupt-<ts>` on startup rather than overwritten. The data shape did not change in 0.4.3 or 0.4.4, so no migration was needed.
 
 ## API
 `GET /api/state` (returns `tz`, `ntfy: {configured, notifyTime}`, `enhance: true|false`, `sets`); `POST /api/sets`; `PUT /api/sets/:id`; `DELETE /api/sets/:id` (404 unknown, 403 expired; also clears that set's `notified` keys and deletes its cover file unless another set still uses the same cover); `POST /api/sets/:id/items/:itemId` ({delta} or {value}); `POST /api/upload` (raw png/jpeg/webp body); `POST /api/ntfy/test`. Item route returns the updated set. Expired sets reject edits/progress with 403.
 
-Set body for POST/PUT: `{ name, type, startDate, daysLeft, releaseDay, cover, items: [{ id, level, variation, total }] }`. `daysLeft` is used only for `type: 'longterm'` (error "Enter the days remaining" if missing or outside 0-3650); `startDate` and `releaseDay` only for daily/weekly. A client sending the old `endDate` field for a long-term set is ignored.
+Set body for POST/PUT: `{ name, type, startDate, daysLeft, perDrop, releaseDay, cover, items: [{ id, level, variation, total }] }`. `daysLeft` is used only for `type: 'longterm'` (error "Enter the days remaining" if missing or outside 0-3650); `startDate`, `perDrop` and `releaseDay` only for daily/weekly (`perDrop` omitted or empty = 1; outside 1-20 gives "Cards per drop must be between 1 and 20"). A client sending the old `endDate` field for a long-term set is ignored.
 
 Enhance (proxied to the upscaler, 503 if `UPSCALER_URL` is unset, 502 if unreachable): `POST /api/enhance?model=fast|best&scale=2..4` (raw PNG/JPEG body, <= 12 MB) -> `{id}` (429 if the upscaler is busy, 400 for a bad image); `GET /api/enhance/:id` -> `{status: running|done|error, progress 0-100, error}`; `GET /api/enhance/:id/result` -> PNG; `DELETE /api/enhance/:id` cancels/discards. Upscaler's own API is the same under `/jobs` plus `/health`; finished jobs are dropped after 20 minutes.
 
@@ -56,7 +57,7 @@ Long-term form flow: the form's **Days remaining** number input (`#f-days`, stat
 - Auto-prune (0.4.2): `pruneExpired()` in `server.js` runs once at startup and every 10 minutes. It keeps the newest `KEEP_EXPIRED` expired sets (default 15; sorted by `endDate` desc, then `createdAt` desc, matching the dashboard's Expired order) and deletes the rest via `removeSets()` (also used by the delete route), which removes the sets, their `notified` keys, and cover files not used by any remaining set. Deletion is permanent and happens on the first startup after upgrading if the user already has more than 15 expired sets.
 - Expiry: a set is expired when today (in `TZ`) is after its `endDate`. Default TZ `America/Phoenix`.
 - Progress counts unique cards per chased level/variation (no per-card tracking). Overall = completed bars / chased bars. Every set must chase at least one level.
-- Daily/weekly sets: the drops ARE the cards of the chased level/variation (there is no separate drop bar, per-drop chips, or separate "number of drops" field; the length comes from the largest item total, and the user ticks a level to reveal its card-count field). Cards you should have by now = drops released so far (capped at the item total); if owned is lower a red "N missing" badge (sum across items; tooltip lists which) shows in the card's top-right corner and the behind rows get a reddish label. The card shows "X weeks/days remaining" (drops whose availability window hasn't closed; daily window = that day, weekly = release day + 6) instead of an end date. Long-term cards show "Ends <date> · Xd Yh left".
+- Daily/weekly sets: the drops ARE the cards of the chased level/variation (there is no separate drop bar, per-drop chips, or separate "number of drops" field; the length comes from the largest item total divided by `perDrop`, and the user ticks a level to reveal its card-count field). Cards you should have by now = drops released so far x `perDrop` (capped at the item total, see `itemMissing` in `dates.js`); if owned is lower a red "N missing" badge (sum across items; tooltip lists which) shows in the card's top-right corner and the behind rows get a reddish label. The card shows "X weeks/days remaining" (drops whose availability window hasn't closed; daily window = that day, weekly = release day + 6) instead of an end date. Long-term cards show "Ends <date> · Xd Yh left".
 - Start date is kept for daily/weekly so a set added late can be backdated to when the first card dropped.
 - Look: portrait trading-card cards (`aspect-ratio: 5/7`, cover flexes to fill, card grows if many bars). The 25% size reduction is done with `zoom: .75` on `.grid` (works in Firefox 126+/Chromium). Page background is a dark overlay (`linear-gradient(rgba(0,0,0,.4) ...)`) over an inline-SVG diamond-plate tile (see `body` in `style.css`; raise the .4 for darker/subtler). The add/edit set modal is scaled with `#modal .dialog{zoom:.75; max-height:calc(92vh / .75)}` so it fits without scrolling (the cropper dialog is intentionally not scaled). Cropper default is 1:1. The plain (non-enhanced) crop is capped at 1400px on its longest side.
 - Weekly release-day highlight (red glow + badge "NEW CARD TODAY", or "Collected today" if caught up) shows only on the release date.
@@ -67,6 +68,7 @@ Long-term form flow: the form's **Days remaining** number input (`#f-days`, stat
 
 ## Verified
 - By the user (this conversation): 0.4.3 `.env` refactor reported as working ("everything from the changes seem to be working"). Whether the Test ntfy notification actually arrived on their device was not reported separately.
+- NOT yet seen by the user: 0.4.5 Cards per drop. Sandbox-tested by Claude: the user's scenario (14-card daily set, 2 per drop, started yesterday, 3 owned) gives 7 drops and 1 missing, and the dashboard badge shows "1 missing"; sets without `perDrop` behave as before; API validation (0, 25, abc rejected; omitted = 1); weekly 12 cards at 2 per drop = 6 weeks; editing `perDrop` keeps owned counts; form shows the field for daily/weekly only and sends it on save (jsdom).
 - By the user: 0.4.4 days remaining reported as working. They did not explicitly confirm that the day count matches the game's own countdown (the "N days from today" interpretation above).
 - By the user: 0.4.0 Enhance tested in their real setup; both Fast and Best worked (Best took about a minute on their server, and they plan to mostly use Best), so the Docker build of `upscaler/` and the UI flow are confirmed working
 - By the user: 0.4.1 delete button (Edit dialog) and icon-only Edit/Duplicate buttons work and look good
@@ -86,10 +88,10 @@ Long-term form flow: the form's **Days remaining** number input (`#f-days`, stat
 
 ## Known limitations / unfinished
 - Enhance: one job at a time (second request gets "busy"); abandoning the page mid-job leaves it running until it finishes or times out; Best is slow on CPU; crops >= 900px skip enhancing; no GPU passthrough support configured
-- Daily/weekly sets have no separate "number of drops" field; the run length is the largest chased card total. If the drops in a set ever differ from the card total, the "missing" and "remaining" numbers will be off. The user considered and set aside adding a Number of drops field (it would be required, drive slots and `endDate`, and be pre-filled from existing sets on edit).
+- Cards per drop is one value for the whole set. If different levels in one daily/weekly set release at different rates, the numbers will be off for the others. Also no separate "number of drops" field: the run length is always ceil(largest chased card total / cards per drop).
 - Weekly notification only knows if the user is behind overall, not specifically whether this week's card was collected
 - Covers cropped before 0.3.0 (5:2) are center-cropped on the portrait cards; re-crop via Edit > Replace
-- Saving an existing weekly set recalculates its end date (last drop + 6 days); saving an existing long-term set recalculates it from today + the days in the field
+- Saving an existing weekly set recalculates its slots and end date from the start date, release day, cards per drop and largest item total (end = last drop + 6 days); saving an existing long-term set recalculates it from today + the days in the field
 - Replaced covers are not deleted from `images/` (orphans accumulate)
 - Expired sets cannot be edited or manually deleted (no Edit button, API returns 403); they are removed automatically once outside the newest 15. A mistyped end date can only be fixed by duplicating (do it before the set expires or while it is still among the newest 15)
 - No per-card tracking, no auth, no snooze/quiet hours
@@ -112,9 +114,8 @@ Long-term form flow: the form's **Days remaining** number input (`#f-days`, stat
 - The user wants dark, minimal styling with accents: near-black, darker red, off-white (never pure black/white); everything is viewed on a desktop monitor
 
 ## Next planned tasks
-- Confirm the user's real `docker-compose.yml` sets `UPSCALER_URL=http://upscaler:3000` on the `slam-tracker` service (add it if missing) and that the README/handoff match it
 - Get the user's test result for 0.4.2 (auto-prune) and give a commit message when they approve
-- Optional: add a "Number of drops" field for daily/weekly sets (see Known limitations)
+- Get the user's test result for 0.4.5 (Cards per drop) and give a commit message when they approve
 - Smaller candidates: cleanup of orphaned images (covers replaced during edits are still never deleted; auto-prune only removes covers of pruned sets)
 - If Best enhance is too slow on their CPU: consider a smaller/faster model, a `cpus` limit tradeoff, or making Fast the only option (the user said Best took about a minute and plans to use it, so this is low priority)
 - The user mentioned wanting to build a larger feature in a new chat; its scope is still not defined in this file (ask them)

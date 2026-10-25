@@ -4,10 +4,10 @@ A small LAN-only dashboard for tracking set progress in the Topps Slam trading c
 
 ## Features
 - Create/edit/duplicate/delete sets (card footer has Duplicate and Edit icon buttons; Delete is inside the Edit dialog and asks for a second click to confirm; expired sets can't be edited or deleted by hand; see Expired sets below): name, cover image (upload + crop, optional AI enhance), levels to chase (Uncommon, Rare, Super Rare, Iconic, Legendary), optional variations per level, card total per variation/level
-- Set types: **Long-term** (you enter the days remaining, as the game shows it, and the app works out the end date), **Weekly drops** (start date + release weekday; runs one week per card) and **Daily drops** (start date; runs one day per card). For weekly/daily sets the length is the biggest card total among the chased levels/variations
+- Set types: **Long-term** (you enter the days remaining, as the game shows it, and the app works out the end date), **Weekly drops** (start date + release weekday) and **Daily drops** (start date). Weekly/daily sets also take **Cards per drop** (default 1; use 2 for sets that release two cards each day or week). The length is the biggest card total among the chased levels/variations divided by cards per drop, rounded up: 14 cards at 2 per drop runs 7 days
 - Portrait trading-card-shaped cards in a grid on a subtle diamond-plate background, with Active (soonest end first) and Expired (muted, read-only) sections
 - Progress bars with centered `owned/total`, +1/-1 buttons, muted green + check when complete, and overall set progress (completed bars / chased bars)
-- Daily/weekly sets show "X weeks/days remaining" and show an "N missing" badge in the card's top-right corner when you have fewer cards than drops released so far
+- Daily/weekly sets show "X weeks/days remaining" and show an "N missing" badge in the card's top-right corner when you have fewer cards than have been released so far (drops released x cards per drop, capped at each level's total)
 - Sets expire after the end of their last day (in the configured timezone); a weekly set ends 6 days after its last drop
 - ntfy reminders (see below)
 - **Cover enhance (optional):** after cropping a phone screenshot, the cropper can upscale it 2-4x with Real-ESRGAN (runs on CPU in a second container, free, no internet needed at run time) and shows a before/after to pick from
@@ -50,6 +50,9 @@ Upscaler container (`upscaler/`): `JOB_TIMEOUT_MIN` (default 45) kills a stuck j
 ## Long-term sets and "days remaining"
 The form asks for **Days remaining** (the number the game shows), not an end date. When you save, the app stores the end date as today plus that many days, in the configured timezone, and the set stays active through the end of that day. Entering `0` means it ends today. When you edit a set, the field is pre-filled with the days left until its current end date, so saving without changing it keeps the same end date.
 
+## Cards per drop
+Daily and weekly sets have a **Cards per drop** field (1 to 20, default 1). With 2 per drop, the set releases two cards each day (or week), so by the end of day 2 you should own 4. Sets created before this field existed have no value stored and behave as 1 per drop. Changing the value on an existing set recalculates its drops and end date; collected cards are kept.
+
 ## Expired sets
 Once a set has ended it moves to the Expired section. The app keeps only the newest `KEEP_EXPIRED` (default 15, by end date) and permanently deletes older expired sets, their sent-notification records, and their cover image (unless another set still uses that image). Checked at startup and every 10 minutes. This cannot be undone, so back up `DATA_DIR` if you care about old sets.
 
@@ -61,7 +64,7 @@ In the cover cropper choose **Off**, **Fast** or **Best** before clicking *Use c
 
 ## Notifications
 Checked every minute; each is sent at most once per day, after `NOTIFY_TIME`.
-- **Weekly sets:** on a release day, if you are behind (fewer cards than drops released so far) and the set isn't complete
+- **Weekly sets:** on a release day, if you are behind (fewer cards than released so far) and the set isn't complete
 - **Long-term sets:** starting 5 days before the end date through the end date, listing what's still missing; skipped if the set is complete
 - **Daily sets:** none
 

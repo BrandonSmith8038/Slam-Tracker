@@ -76,7 +76,7 @@ function cleanSet(b, existing) {
     items.push({ id: prev ? prev.id : crypto.randomUUID(), level: i.level, variation: String(i.variation || '').trim().slice(0, 60), total, owned: Math.min(prev ? prev.owned : 0, total) });
   }
   if (!items.length) return err('Choose at least one level to chase');
-  let startDate = null, releaseDay = null, slots = [], endDate = b.endDate;
+  let startDate = null, releaseDay = null, perDrop = 1, slots = [], endDate = b.endDate;
   if (type === 'longterm') {
     const days = parseInt(b.daysLeft, 10);
     if (!(days >= 0 && days <= 3650)) return err('Enter the days remaining');
@@ -84,7 +84,9 @@ function cleanSet(b, existing) {
   } else {
     startDate = b.startDate;
     if (!DATE_RE.test(startDate || '')) return err('Start date is required');
-    const count = Math.max(...items.map(i => i.total)); // one drop per card in the biggest chased item
+    perDrop = b.perDrop === undefined || b.perDrop === '' ? 1 : parseInt(b.perDrop, 10); // cards released with each drop
+    if (!(perDrop >= 1 && perDrop <= 20)) return err('Cards per drop must be between 1 and 20');
+    const count = Math.ceil(Math.max(...items.map(i => i.total)) / perDrop); // one drop per `perDrop` cards in the biggest chased item
     if (count > (type === 'weekly' ? 104 : 200)) return err(`A ${type} set can't run that many drops (${count})`);
     if (type === 'weekly') {
       releaseDay = Number(b.releaseDay);
@@ -94,7 +96,7 @@ function cleanSet(b, existing) {
     endDate = D.endDateFor(type, slots);
   }
   const cover = typeof b.cover === 'string' && /^\/images\/[\w.-]+$/.test(b.cover) ? b.cover : '';
-  return { set: { id: existing ? existing.id : crypto.randomUUID(), name, type, startDate, endDate, releaseDay, cover, items, slots, createdAt: existing ? existing.createdAt : Date.now() } };
+  return { set: { id: existing ? existing.id : crypto.randomUUID(), name, type, startDate, endDate, releaseDay, perDrop, cover, items, slots, createdAt: existing ? existing.createdAt : Date.now() } };
 }
 
 // ---------- API ----------
