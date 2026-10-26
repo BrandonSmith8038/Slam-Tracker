@@ -76,11 +76,20 @@ function cleanSet(b, existing) {
     items.push({ id: prev ? prev.id : crypto.randomUUID(), level: i.level, variation: String(i.variation || '').trim().slice(0, 60), total, owned: Math.min(prev ? prev.owned : 0, total) });
   }
   if (!items.length) return err('Choose at least one level to chase');
-  let startDate = null, releaseDay = null, perDrop = 1, slots = [], endDate = b.endDate;
+  let startDate = null, releaseDay = null, perDrop = 1, slots = [], endDate = b.endDate, endAt = null;
   if (type === 'longterm') {
-    const days = parseInt(b.daysLeft, 10);
-    if (!(days >= 0 && days <= 3650)) return err('Enter the days remaining');
-    endDate = D.addDays(D.nowParts(TZ).date, days);
+    if (b.keepEnd && existing && existing.type === 'longterm') { // form left the time untouched: keep the exact stored end
+      endAt = existing.endAt || null; endDate = existing.endDate;
+    } else {
+      const num = v => (v === undefined || v === null || String(v).trim() === '' ? null : parseInt(v, 10));
+      const d = num(b.daysLeft), h = num(b.hoursLeft);
+      if (d === null && h === null) return err('Enter the time remaining');
+      const days = d === null ? 0 : d, hours = h === null ? 0 : h;
+      if (!(days >= 0 && days <= 3650 && hours >= 0 && hours <= 23)) return err('Days must be 0-3650 and hours 0-23');
+      if (days * 24 + hours === 0) return err('Time remaining must be more than 0');
+      endAt = Date.now() + (days * 24 + hours) * 3600000; // the game's countdown: this many days + hours from now
+      endDate = D.partsAt(endAt, TZ).date;
+    }
   } else {
     startDate = b.startDate;
     if (!DATE_RE.test(startDate || '')) return err('Start date is required');
@@ -96,7 +105,7 @@ function cleanSet(b, existing) {
     endDate = D.endDateFor(type, slots);
   }
   const cover = typeof b.cover === 'string' && /^\/images\/[\w.-]+$/.test(b.cover) ? b.cover : '';
-  return { set: { id: existing ? existing.id : crypto.randomUUID(), name, type, startDate, endDate, releaseDay, perDrop, cover, items, slots, createdAt: existing ? existing.createdAt : Date.now() } };
+  return { set: { id: existing ? existing.id : crypto.randomUUID(), name, type, startDate, endDate, ...(endAt ? { endAt } : {}), releaseDay, perDrop, cover, items, slots, createdAt: existing ? existing.createdAt : Date.now() } };
 }
 
 // ---------- API ----------

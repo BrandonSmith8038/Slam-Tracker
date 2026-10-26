@@ -107,10 +107,11 @@ function openForm(set, mode) {
   F = {
     mode, id: mode === 'edit' ? set.id : null, name: set ? (mode === 'dup' ? set.name + ' (copy)' : set.name) : '',
     type: set ? set.type : 'longterm', startDate: mode === 'edit' && set.startDate ? set.startDate : now.date,
-    daysLeft: mode === 'edit' ? Math.max(0, D.diffDays(now.date, set.endDate)) : '', releaseDay: set && set.releaseDay != null ? set.releaseDay : 1,
+    daysLeft: mode === 'edit' ? Math.floor(D.minutesLeft(set, now) / 1440) : '', hoursLeft: mode === 'edit' ? Math.floor(D.minutesLeft(set, now) % 1440 / 60) : '', origType: mode === 'edit' ? set.type : null, releaseDay: set && set.releaseDay != null ? set.releaseDay : 1,
     perDrop: set && set.perDrop ? set.perDrop : 1,
     levels, cover: set ? set.cover : '', preview: set ? set.cover : '', blob: null
   };
+  F.origDays = F.daysLeft; F.origHours = F.hoursLeft;
   drawForm();
 }
 function closeForm() {
@@ -121,6 +122,7 @@ function syncForm() {
   const m = $('#modal'); if (!F || !$('#f-name', m)) return;
   F.name = $('#f-name', m).value;
   if ($('#f-days', m)) F.daysLeft = $('#f-days', m).value;
+  if ($('#f-hours', m)) F.hoursLeft = $('#f-hours', m).value;
   if ($('#f-start', m)) F.startDate = $('#f-start', m).value;
   if ($('#f-per', m)) F.perDrop = $('#f-per', m).value;
   if ($('#f-rel', m)) F.releaseDay = +$('#f-rel', m).value;
@@ -142,8 +144,9 @@ function drawForm() {
     <div class="dates">
       ${F.type !== 'longterm' ? `<label class="fld">Starts<input type="date" id="f-start" value="${F.startDate}"></label><label class="fld">Cards per drop<input type="number" min="1" max="20" id="f-per" value="${esc(F.perDrop)}"></label>` : ''}
       ${F.type === 'weekly' ? `<label class="fld">Release day<select id="f-rel">${DAYS.map((d, i) => `<option value="${i}" ${F.releaseDay === i ? 'selected' : ''}>${d}</option>`).join('')}</select></label>` : ''}
-      ${F.type === 'longterm' ? `<label class="fld">Days remaining<input type="number" min="0" max="3650" id="f-days" placeholder="e.g. 12 (0 = ends today)" value="${esc(F.daysLeft)}"></label>` : ''}
+      ${F.type === 'longterm' ? `<label class="fld">Days remaining<input type="number" min="0" max="3650" id="f-days" placeholder="e.g. 4" value="${esc(F.daysLeft)}"></label><label class="fld">Hours remaining<input type="number" min="0" max="23" id="f-hours" placeholder="e.g. 3" value="${esc(F.hoursLeft)}"></label>` : ''}
     </div>
+    ${F.type === 'longterm' ? `<p class="hint">Enter the time left exactly as the game shows it, for example 4 days 3 hours. The set expires at that exact moment.</p>` : ''}
     ${F.type !== 'longterm' ? `<p class="hint">Runs one ${F.type === 'weekly' ? 'week' : 'day'} per drop. The biggest card total below divided by cards per drop sets the length (14 cards at 2 per drop = 7 ${F.type === 'weekly' ? 'weeks' : 'days'}). If you're adding this late, set Starts to the date the first card dropped.</p>` : ''}
     <div class="fld"><span>Cover image</span><div class="cov"><div class="covprev" style="${F.preview ? `background-image:url('${F.preview}')` : ''}"></div><button type="button" class="btn" data-f="pick">${F.preview ? 'Replace…' : 'Upload…'}</button><input type="file" id="f-file" accept="image/*" hidden></div></div>
     <div class="fld"><span>Levels to chase</span>${lv}</div>
@@ -200,7 +203,7 @@ async function saveForm() {
       const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': F.blob.type }, body: F.blob });
       const j = await r.json(); if (!r.ok) throw new Error(j.error); cover = j.path;
     }
-    const body = { name: F.name, type: F.type, startDate: F.startDate, daysLeft: F.daysLeft, perDrop: F.perDrop, releaseDay: F.releaseDay, cover, items };
+    const body = { name: F.name, type: F.type, startDate: F.startDate, daysLeft: F.daysLeft, hoursLeft: F.hoursLeft, keepEnd: !!(F.id && F.type === 'longterm' && F.origType === 'longterm' && String(F.daysLeft) === String(F.origDays) && String(F.hoursLeft) === String(F.origHours)), perDrop: F.perDrop, releaseDay: F.releaseDay, cover, items };
     await (F.id ? api('/api/sets/' + F.id, 'PUT', body) : api('/api/sets', 'POST', body));
     closeForm(); await load(); toast('Set saved');
   } catch (e) { err.textContent = e.message; }

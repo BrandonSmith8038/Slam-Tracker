@@ -4,7 +4,7 @@ A small LAN-only dashboard for tracking set progress in the Topps Slam trading c
 
 ## Features
 - Create/edit/duplicate/delete sets (card footer has Duplicate and Edit icon buttons; Delete is inside the Edit dialog and asks for a second click to confirm; expired sets can't be edited or deleted by hand; see Expired sets below): name, cover image (upload + crop, optional AI enhance), levels to chase (Uncommon, Rare, Super Rare, Iconic, Legendary), optional variations per level, card total per variation/level
-- Set types: **Long-term** (you enter the days remaining, as the game shows it, and the app works out the end date), **Weekly drops** (start date + release weekday) and **Daily drops** (start date). Weekly/daily sets also take **Cards per drop** (default 1; use 2 for sets that release two cards each day or week). The length is the biggest card total among the chased levels/variations divided by cards per drop, rounded up: 14 cards at 2 per drop runs 7 days
+- Set types: **Long-term** (you enter the days and hours remaining, exactly as the game shows them, and the app works out the exact end time), **Weekly drops** (start date + release weekday) and **Daily drops** (start date). Weekly/daily sets also take **Cards per drop** (default 1; use 2 for sets that release two cards each day or week). The length is the biggest card total among the chased levels/variations divided by cards per drop, rounded up: 14 cards at 2 per drop runs 7 days
 - Portrait trading-card-shaped cards in a grid on a subtle diamond-plate background, with Active (soonest end first) and Expired (muted, read-only) sections
 - Progress bars with centered `owned/total`, +1/-1 buttons, muted green + check when complete, and overall set progress (completed bars / chased bars)
 - Daily/weekly sets show "X weeks/days remaining" and show an "N missing" badge in the card's top-right corner when you have fewer cards than have been released so far (drops released x cards per drop, capped at each level's total)
@@ -37,7 +37,7 @@ When running locally, `.env` is not read by Node; export the variables in your s
 |---|---|---|
 | `PORT` | `3000` | Port inside the container |
 | `DATA_DIR` | `/data` (Docker) / `./data` | Where `data.json` and `images/` live |
-| `TZ` | `America/Phoenix` | Timezone for end-of-day expiry, "days remaining" and notification time |
+| `TZ` | `America/Phoenix` | Timezone for end-of-day expiry, end dates and notification time |
 | `NTFY_SERVER` | `https://ntfy.sh` | ntfy server URL |
 | `NTFY_TOPIC` | _(empty)_ | Topic to publish to; notifications are off if empty. With Docker, set it in `.env`, not in `docker-compose.yml` |
 | `NTFY_TOKEN` | _(empty)_ | Optional bearer token. With Docker, set it in `.env` |
@@ -47,8 +47,8 @@ When running locally, `.env` is not read by Node; export the variables in your s
 
 Upscaler container (`upscaler/`): `JOB_TIMEOUT_MIN` (default 45) kills a stuck job; `PORT` (3000).
 
-## Long-term sets and "days remaining"
-The form asks for **Days remaining** (the number the game shows), not an end date. When you save, the app stores the end date as today plus that many days, in the configured timezone, and the set stays active through the end of that day. Entering `0` means it ends today. When you edit a set, the field is pre-filled with the days left until its current end date, so saving without changing it keeps the same end date.
+## Long-term sets and time remaining
+The form asks for **Days remaining** and **Hours remaining** (for example 4 days 3 hours, as the game shows it), not an end date. When you save, the app stores the exact end moment (now + that time) and the card counts down to it, such as "4d 3h left". The set expires at that exact moment, not at the end of the day. Either field can be left blank (blank = 0), but the total must be more than 0 and hours must be 0-23. When you edit a set, the fields are pre-filled with the time left; saving without changing them keeps the exact same end moment, and changing either one restarts the countdown from now. Long-term sets saved before this change have only an end date: they keep expiring at the end of that day, and show the time left until then.
 
 ## Cards per drop
 Daily and weekly sets have a **Cards per drop** field (1 to 20, default 1). With 2 per drop, the set releases two cards each day (or week), so by the end of day 2 you should own 4. Sets created before this field existed have no value stored and behave as 1 per drop. Changing the value on an existing set recalculates its drops and end date; collected cards are kept.
@@ -65,7 +65,7 @@ In the cover cropper choose **Off**, **Fast** or **Best** before clicking *Use c
 ## Notifications
 Checked every minute; each is sent at most once per day, after `NOTIFY_TIME`.
 - **Weekly sets:** on a release day, if you are behind (fewer cards than released so far) and the set isn't complete
-- **Long-term sets:** starting 5 days before the end date through the end date, listing what's still missing; skipped if the set is complete
+- **Long-term sets:** starting 5 days before the end date through the end date, listing what's still missing; skipped if the set is complete or has already ended (a set that ends in the early morning has expired before the 09:00 reminder, so the last alert for it is the day before)
 - **Daily sets:** none
 
 Use the **Test ntfy** button to verify settings.

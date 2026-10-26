@@ -4,18 +4,22 @@
   else root.SlamDates = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const label = i => i.level + (i.variation ? ' ' + i.variation : '');
-  function nowParts(tz) {
+  // Wall-clock parts in `tz` at the instant `ms` (epoch milliseconds)
+  function partsAt(ms, tz) {
     const p = {};
     new Intl.DateTimeFormat('en-CA', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-      .formatToParts(new Date()).forEach(x => { p[x.type] = x.value; });
+      .formatToParts(new Date(ms)).forEach(x => { p[x.type] = x.value; });
     return { date: `${p.year}-${p.month}-${p.day}`, hour: +p.hour % 24, minute: +p.minute };
   }
+  const nowParts = tz => partsAt(Date.now(), tz);
   const utc = d => { const [y, m, n] = d.split('-').map(Number); return Date.UTC(y, m - 1, n); };
   const diffDays = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
   const addDays = (d, n) => new Date(utc(d) + n * 864e5).toISOString().slice(0, 10);
   const weekday = d => new Date(utc(d)).getUTCDay();
-  const isExpired = (s, today) => today > s.endDate; // expires after the end date's day is over
-  const minutesLeft = (s, now) => diffDays(now.date, s.endDate) * 1440 + 1440 - (now.hour * 60 + now.minute);
+  // Long-term sets saved with an exact end instant (endAt, epoch ms) expire at that moment. Everything else
+  // (daily/weekly, and long-term sets saved before endAt existed) expires after the end date's day is over.
+  const isExpired = (s, today) => s.endAt ? Date.now() >= s.endAt : today > s.endDate;
+  const minutesLeft = (s, now) => s.endAt ? Math.max(0, Math.ceil((s.endAt - Date.now()) / 60000)) : diffDays(now.date, s.endDate) * 1440 + 1440 - (now.hour * 60 + now.minute);
 
   // Drops: `count` slots starting at the start date (weekly: first matching weekday on/after it)
   function buildSlots(type, start, count, releaseDay) {
@@ -44,5 +48,5 @@
     return { done, total: set.items.length, complete: set.items.length > 0 && done === set.items.length };
   }
   const missing = set => set.items.filter(i => i.owned < i.total).map(i => `${label(i)} (${i.total - i.owned} more)`);
-  return { label, nowParts, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, itemMissing, remaining, progress, missing };
+  return { label, partsAt, nowParts, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, itemMissing, remaining, progress, missing };
 });
