@@ -48,5 +48,14 @@
     return { done, total: set.items.length, complete: set.items.length > 0 && done === set.items.length };
   }
   const missing = set => set.items.filter(i => i.owned < i.total).map(i => `${label(i)} (${i.total - i.owned} more)`);
-  return { label, partsAt, nowParts, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, itemMissing, remaining, progress, missing };
+  // The instant a set counts as ended: its exact endAt, or the start of the day after endDate in `tz`
+  function startOfDayMs(date, tz) {
+    const want = utc(date); let t = want;
+    for (let i = 0; i < 3; i++) { const p = partsAt(t, tz); t -= utc(p.date) + (p.hour * 60 + p.minute) * 60000 - want; }
+    return t;
+  }
+  const endedAtMs = (s, tz) => s.endAt || startOfDayMs(addDays(s.endDate, 1), tz);
+  // Ended sets stay in Active (greyed out) for one more day, then count as archived (Expired section)
+  const isArchived = (s, tz) => Date.now() >= endedAtMs(s, tz) + 864e5;
+  return { label, partsAt, nowParts, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, itemMissing, remaining, progress, missing, endedAtMs, isArchived };
 });

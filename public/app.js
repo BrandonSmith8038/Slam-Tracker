@@ -45,9 +45,11 @@ function card(s, expired) {
   const urgent = !expired && !prog.complete && mins < 1440;
   const rel = !expired && weekly ? s.slots.find(x => x.date === now.date) : null;
   const caughtUp = s.items.every(i => D.itemMissing(s, i, now.date) === 0);
-  const cls = ['card', expired && 'expired', prog.complete && 'complete', urgent && 'urgent', rel && 'release'].filter(Boolean).join(' ');
+  const grace = expired && !D.isArchived(s, state.tz); // ended under a day ago: stays in Active, greyed and tinted
+  const cls = ['card', expired && !grace && 'expired', grace && 'grace', grace && (prog.complete ? 'gdone' : 'gmiss'), prog.complete && !grace && 'complete', urgent && 'urgent', rel && 'release'].filter(Boolean).join(' ');
   let meta;
-  if (expired) meta = `Ended ${fmt(s.endDate)}`;
+  if (grace) { const m = Math.floor((Date.now() - D.endedAtMs(s, state.tz)) / 60000); meta = `Ended ${m < 1 ? '<1m' : m < 60 ? m + 'm' : Math.floor(m / 60) + 'h ' + m % 60 + 'm'} ago`; }
+  else if (expired) meta = `Ended ${fmt(s.endDate)}`;
   else if (timed) { const n = D.remaining(s, now.date); meta = `${n} ${weekly ? 'week' : 'day'}${n === 1 ? '' : 's'} remaining`; }
   else meta = `Ends ${fmt(s.endDate)} · ${fmtLeft(mins)}`;
   const ctl = id => expired ? '<div></div>' : `<div class="ctl"><button data-act="dec" data-set="${s.id}" data-item="${id}">−</button><button data-act="inc" data-set="${s.id}" data-item="${id}">+</button></div>`;
@@ -66,15 +68,16 @@ function card(s, expired) {
 
 function render() {
   now = D.nowParts(state.tz);
-  const exp = s => D.isExpired(s, now.date);
-  const active = state.sets.filter(s => !exp(s)).sort((a, b) => a.endDate.localeCompare(b.endDate) || a.name.localeCompare(b.name));
-  const expired = state.sets.filter(exp).sort((a, b) => b.endDate.localeCompare(a.endDate));
-  const todo = active.filter(s => !D.progress(s).complete);
+  const archived = s => D.isArchived(s, state.tz), ended = s => D.isExpired(s, now.date);
+  const active = state.sets.filter(s => !archived(s)).sort((a, b) => ended(a) - ended(b) || a.endDate.localeCompare(b.endDate) || a.name.localeCompare(b.name)); // grace-period sets sort last
+  const expired = state.sets.filter(archived).sort((a, b) => b.endDate.localeCompare(a.endDate));
+  const live = active.filter(s => !ended(s));
+  const todo = live.filter(s => !D.progress(s).complete);
   const soon = todo.filter(s => D.minutesLeft(s, now) < 3 * 1440).length;
-  $('#stats').innerHTML = [['Running', active.length, ''], ['Need to finish', todo.length, ''], ['Completed', active.length - todo.length, 'ok'], ['Ending ≤ 3 days', soon, soon ? 'hot' : '']]
+  $('#stats').innerHTML = [['Running', live.length, ''], ['Need to finish', todo.length, ''], ['Completed', live.length - todo.length, 'ok'], ['Ending ≤ 3 days', soon, soon ? 'hot' : '']]
     .map(([l, n, c]) => `<div class="stat ${c}"><b>${n}</b><span>${l}</span></div>`).join('');
   $('#activeCount').textContent = active.length; $('#expiredCount').textContent = expired.length;
-  $('#active').innerHTML = active.map(s => card(s, false)).join('') || '<div class="empty">No active sets. Click “+ New Set” to add one.</div>';
+  $('#active').innerHTML = active.map(s => card(s, ended(s))).join('') || '<div class="empty">No active sets. Click “+ New Set” to add one.</div>';
   $('#expired').innerHTML = expired.map(s => card(s, true)).join('') || '<div class="empty">Nothing expired yet.</div>';
 }
 const find = id => state.sets.find(s => s.id === id);

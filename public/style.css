@@ -48,6 +48,10 @@ main{padding:8px 32px 60px;max-width:2400px;margin:auto}
 .ctl button:hover{border-color:var(--red2)}
 .foot{display:flex;justify-content:flex-end;gap:8px;padding:8px 16px 14px}
 .card.expired{filter:grayscale(1);opacity:.5}.card.expired:hover{opacity:.75}
+.card.grace{position:relative;opacity:.88}.card.grace>*{filter:grayscale(1)}
+.card.grace::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:color}
+.card.grace.gdone{border-color:#4a6354}.card.grace.gdone::after{background:rgba(95,140,110,.6)}
+.card.grace.gmiss{border-color:#6e4f53}.card.grace.gmiss::after{background:rgba(150,85,92,.6)}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:grid;place-items:center;z-index:20;overflow:auto;padding:20px}
 .dialog{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;width:min(760px,100%);max-height:92vh;overflow:auto}
 .dialog h2{margin:0 0 16px}

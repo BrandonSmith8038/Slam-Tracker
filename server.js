@@ -54,7 +54,7 @@ function removeSets(list) {
 function pruneExpired() {
   if (KEEP_EXPIRED < 0) return;
   const today = D.nowParts(TZ).date;
-  const expired = db.sets.filter(s => D.isExpired(s, today)).sort((a, b) => b.endDate.localeCompare(a.endDate) || (b.createdAt || 0) - (a.createdAt || 0));
+  const expired = db.sets.filter(s => D.isArchived(s, TZ)).sort((a, b) => b.endDate.localeCompare(a.endDate) || (b.createdAt || 0) - (a.createdAt || 0));
   const drop = expired.slice(KEEP_EXPIRED);
   if (drop.length) { removeSets(drop); console.log(`Pruned ${drop.length} expired set(s) beyond the newest ${KEEP_EXPIRED}: ${drop.map(s => s.name).join(', ')}`); }
 }
