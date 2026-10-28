@@ -43,10 +43,10 @@ function bar(label, color, owned, total, ctl, cls = '', miss = 0) {
 function card(s, expired) {
   const prog = D.progress(s), mins = D.minutesLeft(s, now), timed = s.type !== 'longterm', weekly = s.type === 'weekly';
   const urgent = !expired && !prog.complete && mins < 1440;
-  const rel = !expired && weekly ? s.slots.find(x => x.date === now.date) : null;
+  const rel = !expired && timed ? s.slots.find(x => x.date === now.date) : null;
   const caughtUp = s.items.every(i => D.itemMissing(s, i, now.date) === 0);
   const grace = expired && !D.isArchived(s, state.tz); // ended under a day ago: stays in Active, greyed and tinted
-  const cls = ['card', expired && !grace && 'expired', grace && 'grace', grace && (prog.complete ? 'gdone' : 'gmiss'), prog.complete && !grace && 'complete', urgent && 'urgent', rel && 'release'].filter(Boolean).join(' ');
+  const cls = ['card', expired && !grace && 'expired', grace && 'grace', grace && (prog.complete ? 'gdone' : 'gmiss'), prog.complete && !grace && 'complete', urgent && 'urgent'].filter(Boolean).join(' ');
   let meta;
   if (grace) { const m = Math.floor((Date.now() - D.endedAtMs(s, state.tz)) / 60000); meta = `Ended ${m < 1 ? '<1m' : m < 60 ? m + 'm' : Math.floor(m / 60) + 'h ' + m % 60 + 'm'} ago`; }
   else if (expired) meta = `Ended ${fmt(s.endDate)}`;
@@ -57,7 +57,7 @@ function card(s, expired) {
     s.items.map(i => bar(i.level + (i.variation ? ' · ' + i.variation : ''), COLORS[i.level], i.owned, i.total, ctl(i.id), '', D.itemMissing(s, i, now.date))).join('');
   const behind = s.items.reduce((n, i) => n + D.itemMissing(s, i, now.date), 0);
   const tip = s.items.filter(i => D.itemMissing(s, i, now.date)).map(i => `${i.level}${i.variation ? ' ' + i.variation : ''}: ${D.itemMissing(s, i, now.date)}`).join(', ');
-  const right = (prog.complete ? '<span class="badge ok">✓ Complete</span>' : rel ? `<span class="badge rel">${caughtUp ? 'Collected today ✓' : 'NEW CARD TODAY'}</span>` : '') +
+  const right = (prog.complete ? '<span class="badge ok">✓ Complete</span>' : rel ? `<span class="badge ${caughtUp ? 'ok' : 'rel'}">${caughtUp ? 'Collected today ✓' : 'NEW CARD TODAY'}</span>` : '') +
     (behind ? `<span class="badge miss" title="${esc(tip)}">${behind} missing</span>` : '');
   const badges = `<span class="badge">${TYPES[s.type]}${weekly ? ' · ' + DAYS[s.releaseDay] + 's' : ''}</span><div class="rb">${right}</div>`;
   return `<article class="${cls}"><div class="cover" ${s.cover ? `style="background-image:url('${esc(s.cover)}')"` : ''}>
@@ -69,7 +69,8 @@ function card(s, expired) {
 function render() {
   now = D.nowParts(state.tz);
   const archived = s => D.isArchived(s, state.tz), ended = s => D.isExpired(s, now.date);
-  const active = state.sets.filter(s => !archived(s)).sort((a, b) => ended(a) - ended(b) || a.endDate.localeCompare(b.endDate) || a.name.localeCompare(b.name)); // grace-period sets sort last
+  const dropToday = s => s.type === 'weekly' && !ended(s) && s.slots.some(x => x.date === now.date); // weekly set with a card releasing today
+  const active = state.sets.filter(s => !archived(s)).sort((a, b) => ended(a) - ended(b) || dropToday(b) - dropToday(a) || a.endDate.localeCompare(b.endDate) || a.name.localeCompare(b.name)); // grace-period sets sort last; new-card-today sets sort first
   const expired = state.sets.filter(archived).sort((a, b) => b.endDate.localeCompare(a.endDate));
   const live = active.filter(s => !ended(s));
   const todo = live.filter(s => !D.progress(s).complete);
