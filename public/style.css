@@ -32,6 +32,8 @@ main{padding:8px 32px 60px;max-width:2400px;margin:auto}
 #active.stack .card{flex:none;width:420px;z-index:calc(var(--n) + 1 - var(--i))}
 #active.stack .card:not(:last-child){margin-right:calc(min(var(--peek), (100cqw - 420px) / (var(--n) - 1)) - 420px)}
 #active.stack .card:hover{z-index:500}
+#active.stack .badges{flex-direction:row-reverse}
+#active.stack .badge .xtra{display:none}
 #active.stack .card:not(.grace):not(.expired):hover{--lift:-14px}
 .cover{flex:1 1 auto;min-height:200px;background:linear-gradient(135deg,#3a1418,#1c1c21) center/cover;position:relative;display:flex;align-items:flex-end}
 .cover::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(28,28,33,.96),transparent 60%)}

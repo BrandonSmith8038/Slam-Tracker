@@ -6,6 +6,8 @@ A small LAN-only dashboard for tracking set progress in the Topps Slam trading c
 - Create/edit/duplicate/delete sets (card footer has Duplicate and Edit icon buttons; Delete is inside the Edit dialog and asks for a second click to confirm; ended sets can't be edited or deleted by hand; see Ended and expired sets below): name, cover image (upload + crop, optional AI enhance), levels to chase (Uncommon, Rare, Super Rare, Iconic, Legendary), optional variations per level, card total per variation/level
 - Set types: **Long-term** (you enter the days and hours remaining, exactly as the game shows them, and the app works out the exact end time), **Weekly drops** (start date + release weekday) and **Daily drops** (start date). Weekly/daily sets also take **Cards per drop** (default 1; use 2 for sets that release two cards each day or week). The length is the biggest card total among the chased levels/variations divided by cards per drop, rounded up: 14 cards at 2 per drop runs 7 days
 - Portrait trading-card-shaped cards in a grid on a subtle diamond-plate background, with Active and Expired (muted, read-only) sections. Active order: weekly sets with a card live today first, then running sets by soonest end, then greyed-out sets in their grace day last
+- **3D card effect:** live cards look like raised slabs and, on hover, lift, tilt toward the pointer and show a soft off-white glare (see Card hover effect below)
+- **Collapse / Expand:** a header button stacks the Active cards into one overlapping row (soonest-ending on top, at the left) and expands them back into the grid, with a glide animation (see Collapse / Expand below)
 - Progress bars with centered `owned/total`, +1/-1 buttons, muted green + check when complete, and overall set progress (completed bars / chased bars)
 - Daily/weekly sets show "X weeks/days remaining" and an "N missing" badge in the card's top-right corner when you have fewer cards than have been released so far (drops released x cards per drop, capped at each level's total). New drops count as released at 11:00, not midnight (see Drop time)
 - Daily and weekly sets show a red pulsing **NEW CARD TODAY** badge from 11:00 on a drop day until you've collected today's card, then a green **Collected today ✓** badge until midnight
@@ -59,7 +61,21 @@ The form asks for **Days remaining** and **Hours remaining** (for example 4 days
 Daily and weekly sets have a **Cards per drop** field (1 to 20, default 1). With 2 per drop, the set releases two cards each day (or week), so by the end of day 2 you should own 4. Sets created before this field existed have no value stored and behave as 1 per drop. Changing the value on an existing set recalculates its drops and end date; collected cards are kept.
 
 ## Drop time
-Daily and weekly drops go live at 11:00 in `TZ`, not at midnight. Before 11:00 on a drop day, the app still measures you against the previous drops, so a daily set won't show a missing card until 11:00. From 11:00 until midnight the day's card shows the NEW CARD TODAY / Collected today badge, and a weekly set with a live card moves to the front of the Active section. The weekly ntfy reminder is sent once the drop is live (11:00 or later). How many days or weeks remain, and when a set ends, still follow calendar days.
+Daily and weekly drops go live at 11:00 in `TZ`, not at midnight. Before 11:00 on a drop day, the app still measures you against the previous drops, so a daily set won't show a missing card until 11:00. From 11:00 until midnight the day's card shows the NEW CARD TODAY / Collected today badge, and a weekly set with a live card moves to the front of the Active section. How many days or weeks remain, and when a set ends, still follow calendar days.
+
+## Card hover effect
+Live cards (not greyed-out grace-day cards and not Expired cards) have a layered shadow so they look slightly raised. When you hover one it lifts a few pixels, tilts up to about 5 degrees toward the pointer and shows a soft off-white glare that follows the pointer. The tilt is re-applied after every +1/-1 click and every 60-second refresh so the card doesn't snap flat while you are on it. Grace-day and Expired cards stay flat so their grey tint is unaffected.
+
+The effect is switched off when the operating system asks for reduced motion. On Windows that is **Settings > Accessibility > Visual effects > Animation effects**: if that is turned off, the browser reports reduced motion and the tilt, lift, glare and the Collapse/Expand animation are all skipped. Turn Animation effects on to see them.
+
+## Collapse / Expand
+The **Collapse** button in the header stacks the Active cards into one overlapping row; the button then reads **Expand** and puts the cards back in the grid. Only the Active section is affected (Expired always stays a grid).
+- The soonest-ending card (or a weekly set with a card live today) is the top card at the left; the rest fan out to the right in Active order, with greyed-out grace-day sets at the very back (far right).
+- Stacked cards are a fixed width; the overlap adjusts to the number of sets so the stack always fits the window (each buried card shows up to about 110px).
+- In the stack, the set type is shown in the top-right corner of every card, shortened to Weekly / Daily / Long-term so it fits the visible strip. The status badges (N missing, NEW CARD TODAY, Complete) move to the top-left, so on buried cards they are hidden until you hover. Expanding restores the normal badge layout and the full type text (for example "Weekly drops · Fridays").
+- Hovering a card brings it to the front and lifts it, so you can read it and even use +1/-1; for everyday updates the expanded grid is easier.
+- Switching views plays a short glide animation (cards slide and resize from their old position to the new one, about 0.45s). It is skipped when the system asks for reduced motion (see above). The Expired section below does not animate; it just jumps when the Active section changes height.
+- Your choice is remembered in the browser (`localStorage`, key `slamStacked`), per browser; it is not stored in `data.json`.
 
 ## Ended and expired sets
 A set **ends** at its exact end time (long-term sets saved with days/hours) or at midnight (in `TZ`) after its end date (daily and weekly sets, and older long-term sets). Ending has two stages:
@@ -77,11 +93,11 @@ In the cover cropper choose **Off**, **Fast** or **Best** before clicking *Use c
 
 ## Notifications
 Checked every minute; each is sent at most once per day, after `NOTIFY_TIME`.
-- **Weekly sets:** on a release day, once the drop is live (11:00 or later, so effectively at 11:00 with the default `NOTIFY_TIME`), if you are behind (fewer cards than released so far) and the set isn't complete
+- **Weekly sets:** on a release day, once the drop is live (11:00 or later in `TZ`) and `NOTIFY_TIME` has passed, if you are behind (fewer cards than released so far) and the set isn't complete. With the default `NOTIFY_TIME` of 09:00 the reminder goes out at about 11:00
 - **Long-term sets:** starting 5 days before the end date through the end date, listing what's still missing; skipped if the set is complete or has already ended (a set that ends in the early morning has ended before the 09:00 reminder, so the last alert for it is the day before)
 - **Daily sets:** none
 
 Use the **Test ntfy** button to verify settings.
 
 ## Data
-Everything is in `DATA_DIR`: `data.json` (sets, progress, sent-notification log) and `images/` (cropped covers). Back up that folder. No database. The upscaler keeps nothing (temporary files only). The app reads `data.json` only at startup, so stop the container before editing it by hand. On Unraid the file is owned by root, so edit it from the Unraid web terminal rather than over a network share.
+Everything is in `DATA_DIR`: `data.json` (sets, progress, sent-notification log) and `images/` (cropped covers). Back up that folder. No database. The upscaler keeps nothing (temporary files only). The app reads `data.json` only at startup, so stop the container before editing it by hand. On Unraid the file is owned by root, so edit it from the Unraid web terminal rather than over a network share. The only thing kept outside `DATA_DIR` is the Collapse/Expand choice, which lives in each browser's `localStorage`.

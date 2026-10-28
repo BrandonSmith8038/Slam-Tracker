@@ -219,7 +219,7 @@ async function runNotifications() {
     if (D.isExpired(s, now.date) || D.progress(s).complete) continue;
     let kind = null, title, msg, prio = 3, tags;
     if (s.type === 'weekly') {
-      const slot = s.slots.find(x => x.date === now.date);
+      const slot = D.todaySlot(s, now.date);
       if (!slot || s.items.every(i => D.itemMissing(s, i, now.date) === 0)) continue; // no drop today, or already caught up
       kind = 'release'; title = `${s.name}: new card today`; msg = "This week's card is available today.";
       prio = 4; tags = ['tada'];

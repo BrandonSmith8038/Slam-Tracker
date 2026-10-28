@@ -60,7 +60,7 @@ function card(s, expired) {
   const tip = s.items.filter(i => D.itemMissing(s, i, now.date)).map(i => `${i.level}${i.variation ? ' ' + i.variation : ''}: ${D.itemMissing(s, i, now.date)}`).join(', ');
   const right = (prog.complete ? '<span class="badge ok">✓ Complete</span>' : rel ? `<span class="badge ${caughtUp ? 'ok' : 'rel'}">${caughtUp ? 'Collected today ✓' : 'NEW CARD TODAY'}</span>` : '') +
     (behind ? `<span class="badge miss" title="${esc(tip)}">${behind} missing</span>` : '');
-  const badges = `<span class="badge">${TYPES[s.type]}${weekly ? ' · ' + DAYS[s.releaseDay] + 's' : ''}</span><div class="rb">${right}</div>`;
+  const badges = `<span class="badge">${TYPES[s.type].replace(' drops', '')}<span class="xtra">${s.type !== 'longterm' ? ' drops' : ''}${weekly ? ' · ' + DAYS[s.releaseDay] + 's' : ''}</span></span><div class="rb">${right}</div>`;
   return `<article class="${cls}" data-id="${s.id}"><div class="cover" ${s.cover ? `style="background-image:url('${esc(s.cover)}')"` : ''}>
     <div class="badges">${badges}</div><div class="ttl"><h3>${esc(s.name)}</h3><div class="meta ${urgent ? 'hot' : ''}">${meta}</div></div></div>
     <div class="rows">${rows}</div>
