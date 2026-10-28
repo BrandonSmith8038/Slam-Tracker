@@ -36,7 +36,13 @@
     const e = addDays(slot.date, 6);
     return e > set.endDate ? set.endDate : e;
   }
-  const released = (set, today) => set.type === 'longterm' ? 0 : set.slots.filter(s => s.date <= today).length;
+  // Drops go live at DROP_HOUR (11:00 in the app's timezone), not at midnight. Before then, today's drop hasn't happened yet.
+  const DROP_HOUR = 11;
+  let curTz = 'America/Phoenix'; // remembered by nowParts(), so server and browser both use the configured TZ
+  const dropLive = today => { const n = partsAt(Date.now(), curTz); return today !== n.date || n.hour >= DROP_HOUR; };
+  const dropDate = today => dropLive(today) ? today : addDays(today, -1);
+  const todaySlot = (set, today) => dropLive(today) ? set.slots.find(s => s.date === today) : undefined;
+  const released = (set, today) => set.type === 'longterm' ? 0 : set.slots.filter(s => s.date <= dropDate(today)).length;
   // Cards released per drop (daily/weekly sets); older sets have no perDrop and drop one card at a time
   const perDrop = set => set.perDrop || 1;
   // Cards you should have by now for a chased item in a daily/weekly set (perDrop per released drop) minus what you own
@@ -57,5 +63,6 @@
   const endedAtMs = (s, tz) => s.endAt || startOfDayMs(addDays(s.endDate, 1), tz);
   // Ended sets stay in Active (greyed out) for one more day, then count as archived (Expired section)
   const isArchived = (s, tz) => Date.now() >= endedAtMs(s, tz) + 864e5;
-  return { label, partsAt, nowParts, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, itemMissing, remaining, progress, missing, endedAtMs, isArchived };
+  const nowPartsTz = tz => { curTz = tz; return nowParts(tz); }; // also remembers the timezone for the drop-time helpers
+  return { label, partsAt, nowParts: nowPartsTz, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, itemMissing, remaining, progress, missing, endedAtMs, isArchived, todaySlot, DROP_HOUR };
 });
