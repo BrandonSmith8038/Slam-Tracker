@@ -27,6 +27,12 @@ main{padding:8px 32px 60px;max-width:2400px;margin:auto}
 .card:not(.grace):not(.expired):hover::before{opacity:1}
 @media (prefers-reduced-motion:reduce){.card{transform:none!important;transition:none}.card::before{display:none}}
 .card.release{border-color:var(--red2);box-shadow:0 0 0 1px var(--red2),0 0 28px rgba(181,48,58,.5)}
+/* Collapsed stack: one overlapping row, soonest-ending card in front on the left, the rest fanned out to the right */
+#active.stack{container-type:inline-size;display:flex;flex-direction:row;justify-content:center;align-items:flex-start;gap:0;padding:26px 0 8px;--peek:110px}
+#active.stack .card{flex:none;width:420px;z-index:calc(var(--n) + 1 - var(--i))}
+#active.stack .card:not(:last-child){margin-right:calc(min(var(--peek), (100cqw - 420px) / (var(--n) - 1)) - 420px)}
+#active.stack .card:hover{z-index:500}
+#active.stack .card:not(.grace):not(.expired):hover{--lift:-14px}
 .cover{flex:1 1 auto;min-height:200px;background:linear-gradient(135deg,#3a1418,#1c1c21) center/cover;position:relative;display:flex;align-items:flex-end}
 .cover::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(28,28,33,.96),transparent 60%)}
 .cover .ttl{position:relative;z-index:1;padding:0 16px 10px;width:100%}

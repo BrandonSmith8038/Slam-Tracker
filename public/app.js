@@ -16,6 +16,7 @@ const fmtMD = d => dt(d).toLocaleDateString('en-US', { month: 'short', day: 'num
 const fmtLeft = m => { const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60); return d ? `${d}d ${h}h left` : `${h}h ${m % 60}m left`; };
 
 let state = { sets: [], tz: 'America/Phoenix', ntfy: {}, enhance: false }, now = null, formOpen = false, F = null, enhMode = 'fast';
+let stacked = false; try { stacked = localStorage.getItem('slamStacked') === '1'; } catch {} // collapsed (stacked) view of the Active section
 
 async function api(url, method = 'GET', body) {
   const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -80,6 +81,11 @@ function render() {
   $('#activeCount').textContent = active.length; $('#expiredCount').textContent = expired.length;
   $('#active').innerHTML = active.map(s => card(s, ended(s))).join('') || '<div class="empty">No active sets. Click “+ New Set” to add one.</div>';
   $('#expired').innerHTML = expired.map(s => card(s, true)).join('') || '<div class="empty">Nothing expired yet.</div>';
+  const act = $('#active'), cards = [...act.querySelectorAll('.card')];
+  act.classList.toggle('stack', stacked);
+  act.style.setProperty('--n', cards.length);
+  cards.forEach((c, i) => c.style.setProperty('--i', i)); // stack order: first (soonest) card on top
+  $('#stackToggle').textContent = stacked ? 'Expand' : 'Collapse';
   reapplyTilt();
 }
 const find = id => state.sets.find(s => s.id === id);
@@ -95,6 +101,21 @@ document.addEventListener('click', async e => {
   } catch (err) { toast(err.message, true); load(); }
 });
 $('#newSet').onclick = () => openForm(null, 'new');
+$('#stackToggle').onclick = () => {
+  const ZOOM = .75; // must match `zoom` on .grid in style.css
+  const first = new Map([...document.querySelectorAll('#active .card')].map(c => [c.dataset.id, c.getBoundingClientRect()])); // where each card is now
+  stacked = !stacked; try { localStorage.setItem('slamStacked', stacked ? '1' : '0'); } catch {}
+  render();
+  if (calm.matches) return; // reduced motion: just snap
+  document.querySelectorAll('#active .card').forEach(c => { // FLIP: start each card at its old spot/size, glide to the new one
+    const a = first.get(c.dataset.id); if (!a) return;
+    const b = c.getBoundingClientRect(), k = a.width / b.width;
+    c.animate([
+      { transformOrigin: '0 0', transform: `translate(${(a.left - b.left) / ZOOM}px, ${(a.top - b.top) / ZOOM}px) scale(${k})` },
+      { transformOrigin: '0 0', transform: 'none' }
+    ], { duration: 450, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  });
+};
 $('#testNtfy').onclick = async () => {
   try { await api('/api/ntfy/test', 'POST', {}); toast('Test notification sent'); } catch (e) { toast(e.message, true); }
 };
