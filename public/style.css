@@ -21,6 +21,11 @@ main{padding:8px 32px 60px;max-width:2400px;margin:auto}
 .empty{color:var(--dim);padding:30px;border:1px dashed var(--line);border-radius:12px;grid-column:1/-1;text-align:center}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;transition:border-color .2s,box-shadow .2s;display:flex;flex-direction:column;aspect-ratio:5/7}
 .card.urgent{border-color:var(--red)}.card.complete{border-color:var(--green)}
+.card:not(.grace):not(.expired){position:relative;transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(var(--lift,0px));transition:border-color .2s,box-shadow .2s,transform .15s ease-out;box-shadow:inset 0 1px 0 rgba(235,233,228,.08),0 2px 3px rgba(0,0,0,.5),0 10px 22px rgba(0,0,0,.4),0 0 0 1px rgba(0,0,0,.35)}
+.card:not(.grace):not(.expired):hover{--lift:-5px;box-shadow:0 4px 6px rgba(0,0,0,.5),0 18px 34px rgba(0,0,0,.55)}
+.card:not(.grace):not(.expired)::before{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .2s;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(235,233,228,.16),transparent 55%)}
+.card:not(.grace):not(.expired):hover::before{opacity:1}
+@media (prefers-reduced-motion:reduce){.card{transform:none!important;transition:none}.card::before{display:none}}
 .card.release{border-color:var(--red2);box-shadow:0 0 0 1px var(--red2),0 0 28px rgba(181,48,58,.5)}
 .cover{flex:1 1 auto;min-height:200px;background:linear-gradient(135deg,#3a1418,#1c1c21) center/cover;position:relative;display:flex;align-items:flex-end}
 .cover::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(28,28,33,.96),transparent 60%)}

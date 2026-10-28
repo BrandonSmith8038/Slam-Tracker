@@ -60,7 +60,7 @@ function card(s, expired) {
   const right = (prog.complete ? '<span class="badge ok">✓ Complete</span>' : rel ? `<span class="badge ${caughtUp ? 'ok' : 'rel'}">${caughtUp ? 'Collected today ✓' : 'NEW CARD TODAY'}</span>` : '') +
     (behind ? `<span class="badge miss" title="${esc(tip)}">${behind} missing</span>` : '');
   const badges = `<span class="badge">${TYPES[s.type]}${weekly ? ' · ' + DAYS[s.releaseDay] + 's' : ''}</span><div class="rb">${right}</div>`;
-  return `<article class="${cls}"><div class="cover" ${s.cover ? `style="background-image:url('${esc(s.cover)}')"` : ''}>
+  return `<article class="${cls}" data-id="${s.id}"><div class="cover" ${s.cover ? `style="background-image:url('${esc(s.cover)}')"` : ''}>
     <div class="badges">${badges}</div><div class="ttl"><h3>${esc(s.name)}</h3><div class="meta ${urgent ? 'hot' : ''}">${meta}</div></div></div>
     <div class="rows">${rows}</div>
     <div class="foot"><button class="btn sm icon" data-act="dup" data-set="${s.id}" title="Duplicate" aria-label="Duplicate">${ICONS.dup}</button>${expired ? '' : `<button class="btn sm icon" data-act="edit" data-set="${s.id}" title="Edit" aria-label="Edit">${ICONS.edit}</button>`}</div></article>`;
@@ -80,6 +80,7 @@ function render() {
   $('#activeCount').textContent = active.length; $('#expiredCount').textContent = expired.length;
   $('#active').innerHTML = active.map(s => card(s, ended(s))).join('') || '<div class="empty">No active sets. Click “+ New Set” to add one.</div>';
   $('#expired').innerHTML = expired.map(s => card(s, true)).join('') || '<div class="empty">Nothing expired yet.</div>';
+  reapplyTilt();
 }
 const find = id => state.sets.find(s => s.id === id);
 function replace(set) { state.sets[state.sets.findIndex(s => s.id === set.id)] = set; render(); }
@@ -333,6 +334,26 @@ function openCropper(file) {
     };
   });
 }
+
+// ---------- card tilt (live cards only; grace/expired stay flat) ----------
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
+let tilt = null; // { id, rx, ry, mx, my } for the card under the pointer
+const cardEl = id => $(`.card[data-id="${id}"]`);
+const paintTilt = c => ['rx', 'ry', 'mx', 'my'].forEach(k => c.style.setProperty('--' + k, tilt[k]));
+const clearTilt = c => ['rx', 'ry', 'mx', 'my'].forEach(k => c.style.removeProperty('--' + k));
+function dropTilt() { if (tilt) { const o = cardEl(tilt.id); if (o) clearTilt(o); tilt = null; } }
+function reapplyTilt() { if (!tilt) return; const c = cardEl(tilt.id); if (c) paintTilt(c); else tilt = null; } // render() rebuilds the cards
+document.addEventListener('pointermove', e => {
+  if (calm.matches || e.pointerType === 'touch') return;
+  let c = e.target.closest ? e.target.closest('.card') : null;
+  if (c && (c.classList.contains('grace') || c.classList.contains('expired'))) c = null;
+  if (tilt && (!c || c.dataset.id !== tilt.id)) dropTilt();
+  if (!c) return;
+  const r = c.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  tilt = { id: c.dataset.id, rx: ((.5 - y) * 10).toFixed(2) + 'deg', ry: ((x - .5) * 10).toFixed(2) + 'deg', mx: (x * 100).toFixed(1) + '%', my: (y * 100).toFixed(1) + '%' };
+  paintTilt(c);
+});
+document.documentElement.addEventListener('pointerleave', dropTilt);
 
 load().catch(e => toast(e.message, true));
 setInterval(() => { if (!formOpen) load().catch(() => {}); }, 60000);
