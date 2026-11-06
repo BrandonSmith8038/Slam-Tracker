@@ -53,9 +53,15 @@ function card(s, expired) {
   else if (expired) meta = `Ended ${fmt(s.endDate)}`;
   else if (timed) { const n = D.remaining(s, now.date); meta = `${n} ${weekly ? 'week' : 'day'}${n === 1 ? '' : 's'} remaining`; }
   else meta = `Ends ${fmt(s.endDate)} · ${fmtLeft(mins)}`;
-  const ctl = id => expired ? '<div></div>' : `<div class="ctl"><button data-act="dec" data-set="${s.id}" data-item="${id}">−</button><button data-act="inc" data-set="${s.id}" data-item="${id}">+</button></div>`;
+  // "+" is disabled once you own every card released so far (daily/weekly) or the whole total (long-term)
+  const ctl = i => {
+    if (expired) return '<div></div>';
+    const full = i.owned >= D.available(s, i, now.date);
+    const tip = full ? (i.owned >= i.total ? 'All cards collected' : 'Caught up: no more cards released yet') : '';
+    return `<div class="ctl"><button data-act="dec" data-set="${s.id}" data-item="${i.id}">−</button><button data-act="inc" data-set="${s.id}" data-item="${i.id}"${full ? ` disabled title="${tip}"` : ''}>+</button></div>`;
+  };
   const rows = bar('Overall', '', prog.done, prog.total, '<div></div>', 'overall') +
-    s.items.map(i => bar(i.level + (i.variation ? ' · ' + i.variation : ''), COLORS[i.level], i.owned, i.total, ctl(i.id), '', D.itemMissing(s, i, now.date))).join('');
+    s.items.map(i => bar(i.level + (i.variation ? ' · ' + i.variation : ''), COLORS[i.level], i.owned, i.total, ctl(i), '', D.itemMissing(s, i, now.date))).join('');
   const behind = s.items.reduce((n, i) => n + D.itemMissing(s, i, now.date), 0);
   const tip = s.items.filter(i => D.itemMissing(s, i, now.date)).map(i => `${i.level}${i.variation ? ' ' + i.variation : ''}: ${D.itemMissing(s, i, now.date)}`).join(', ');
   const right = (prog.complete ? '<span class="badge ok">✓ Complete</span>' : rel ? `<span class="badge ${caughtUp ? 'ok' : 'rel'}">${caughtUp ? 'Collected today ✓' : 'NEW CARD TODAY'}</span>` : '') +

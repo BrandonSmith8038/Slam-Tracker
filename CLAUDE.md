@@ -20,7 +20,7 @@ Optional second container `upscaler/` (Enhance for cover images): `ubuntu:24.04`
 - `public/app.js` - rendering, set form modal, cropper, enhance flow, toasts, card tilt, stack toggle + animation
 - `docker-compose.yml` (services `slam-tracker` and `upscaler`), `.env.example`, `README.md`
 
-No automated test suite. `node --check public/app.js` / `server.js` is the quick smoke check. `package.json` version (0.1.0) is stale and not synced with feature labels (current 0.5.2).
+No automated test suite. `node --check public/app.js` / `server.js` is the quick smoke check. `package.json` version (0.1.0) is stale and not synced with feature labels (current 0.5.3).
 
 ## Configuration
 - ntfy `NTFY_SERVER` / `NTFY_TOPIC` / `NTFY_TOKEN` come from `.env`; compose uses `${NTFY_SERVER:-https://ntfy.sh}` etc. Notifications are off when `NTFY_TOPIC` is empty.
@@ -92,8 +92,9 @@ Long-term form: `#f-days` / `#f-hours` (`F.daysLeft`/`F.hoursLeft`) are pre-fill
 - Animation is FLIP in the `#stackToggle` click handler: record rects by `data-id`, flip `stacked`, `render()`, then `animate()` each card from `translate(dx,dy) scale(k)` to `none` over 450 ms, `cubic-bezier(.2,.8,.2,1)`. Deltas are divided by `ZOOM = .75`, which **must match the `zoom` on `.grid`** (also re-check the 420px width if it changes). Skipped when `calm.matches`.
 
 ### Other behavior
+- "+" cap (0.5.3): a bar's "+" button is `disabled` (faded, tooltip "Caught up: no more cards released yet" / "All cards collected") when `owned >= D.available(set, item, today)`; long-term's available = total. Re-enables on the 60s refresh after the 11:00 drop. The progress route also caps increases at `max(owned, available)` (never lowers an existing higher count; decreases are unaffected).
 - Progress counts unique cards per chased level/variation (no per-card tracking). Overall = completed bars / chased bars. Every set must chase at least one level.
-- Daily/weekly: drops ARE the cards of the chased level/variation. Cards due = released drops x `perDrop`, capped at the item total (`itemMissing`). If owned is lower, a red "N missing" badge shows (tooltip lists which) and behind rows get a reddish label. Card shows "X weeks/days remaining" (windows still open: daily = that day, weekly = release day + 6). Long-term shows "Ends <date> · Xd Yh left".
+- Daily/weekly: drops ARE the cards of the chased level/variation. Cards due = released drops x `perDrop`, capped at the item total (`D.available`; `itemMissing` = available - owned). If owned is lower, a red "N missing" badge shows (tooltip lists which) and behind rows get a reddish label. Card shows "X weeks/days remaining" (windows still open: daily = that day, weekly = release day + 6). Long-term shows "Ends <date> · Xd Yh left".
 - Start date is kept for daily/weekly so a late-added set can be backdated.
 - Release badges: for daily and weekly sets when `todaySlot` exists, a red pulsing "NEW CARD TODAY" (`badge rel`) while behind, or green "Collected today ✓" (`badge ok`) when caught up. Only weekly sets jump to the front of Active. The red release-day border was removed; `.card.release` in `style.css` is dead code.
 - Look: portrait cards (`aspect-ratio: 5/7`, cover flexes, card grows with many bars). 25% size reduction via `zoom:.75` on `.grid`. Background is a dark overlay over an inline-SVG diamond-plate tile (`body` in `style.css`). Set modal scaled with `#modal .dialog{zoom:.75; max-height:calc(92vh / .75)}` (cropper not scaled). Cropper default 1:1; plain crop capped at 1400px. Red "urgent" border when < 24h remain (not for ended sets).
@@ -112,6 +113,7 @@ Long-term form: `#f-days` / `#f-hours` (`F.daysLeft`/`F.hoursLeft`) are pre-fill
 
 ## Status
 - 0.4.2 (auto-prune of expired sets beyond newest 15) awaits user confirmation once enough sets have expired.
+- 0.5.3 ("+" disabled when caught up on released cards) confirmed by the user.
 - 0.5.2 (weekly ntfy uses `D.todaySlot` in `runNotifications()`) is not yet confirmed; the real 11:00 ntfy has never been observed. Verify the line is present in `server.js`.
 - Files after the 0.5.1 edits were applied by hand and never re-read by Claude in the old chat; check `app.js`, `style.css`, `index.html` against the descriptions above before trusting them.
 - Unconfirmed: stronger resting card shadow (`inset 0 1px 0 rgba(235,233,228,.08)` plus 1px dark outline) offered, unknown if applied; whether the ntfy topic was rotated if once pushed to GitHub.

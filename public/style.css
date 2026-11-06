@@ -59,6 +59,7 @@ main{padding:8px 32px 60px;max-width:2400px;margin:auto}
 .ctl{display:flex;gap:6px}
 .ctl button{width:38px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:18px;line-height:1;cursor:pointer}
 .ctl button:hover{border-color:var(--red2)}
+.ctl button:disabled{opacity:.35;cursor:not-allowed;border-color:var(--line)}
 .foot{display:flex;justify-content:flex-end;gap:8px;padding:8px 16px 14px}
 .card.expired{filter:grayscale(1);opacity:.5}.card.expired:hover{opacity:.75}
 .card.grace{position:relative;opacity:.88}.card.grace>*{filter:grayscale(1)}

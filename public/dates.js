@@ -46,7 +46,9 @@
   // Cards released per drop (daily/weekly sets); older sets have no perDrop and drop one card at a time
   const perDrop = set => set.perDrop || 1;
   // Cards you should have by now for a chased item in a daily/weekly set (perDrop per released drop) minus what you own
-  const itemMissing = (set, item, today) => set.type === 'longterm' ? 0 : Math.max(0, Math.min(item.total, released(set, today) * perDrop(set)) - item.owned);
+  // Cards obtainable so far for a chased item: daily/weekly = perDrop per released drop (capped at the total); long-term = the total
+  const available = (set, item, today) => set.type === 'longterm' ? item.total : Math.min(item.total, released(set, today) * perDrop(set));
+  const itemMissing = (set, item, today) => set.type === 'longterm' ? 0 : Math.max(0, available(set, item, today) - item.owned);
   const remaining = (set, today) => set.slots.filter(s => windowEnd(set, s) >= today).length;
   // Each chased level/variation is one bar; overall = completed bars / bars.
   function progress(set) {
@@ -64,5 +66,5 @@
   // Ended sets stay in Active (greyed out) for one more day, then count as archived (Expired section)
   const isArchived = (s, tz) => Date.now() >= endedAtMs(s, tz) + 864e5;
   const nowPartsTz = tz => { curTz = tz; return nowParts(tz); }; // also remembers the timezone for the drop-time helpers
-  return { label, partsAt, nowParts: nowPartsTz, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, itemMissing, remaining, progress, missing, endedAtMs, isArchived, todaySlot, DROP_HOUR };
+  return { label, partsAt, nowParts: nowPartsTz, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, available, itemMissing, remaining, progress, missing, endedAtMs, isArchived, todaySlot, DROP_HOUR };
 });
