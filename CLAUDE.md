@@ -114,7 +114,7 @@ Long-term form: `#f-days` / `#f-hours` (`F.daysLeft`/`F.hoursLeft`) are pre-fill
 ## Status
 - 0.4.2 (auto-prune of expired sets beyond newest 15) awaits user confirmation once enough sets have expired.
 - 0.5.3 ("+" disabled when caught up on released cards) confirmed by the user.
-- 0.5.2 (weekly ntfy uses `D.todaySlot` in `runNotifications()`) is not yet confirmed; the real 11:00 ntfy has never been observed. Verify the line is present in `server.js`.
+- 0.5.2 (weekly ntfy uses `D.todaySlot` in `runNotifications()`) confirmed by the user: the real 11:00 weekly ntfy arrives.
 - Files after the 0.5.1 edits were applied by hand and never re-read by Claude in the old chat; check `app.js`, `style.css`, `index.html` against the descriptions above before trusting them.
 - Unconfirmed: stronger resting card shadow (`inset 0 1px 0 rgba(235,233,228,.08)` plus 1px dark outline) offered, unknown if applied; whether the ntfy topic was rotated if once pushed to GitHub.
 - Not tested: stack with 15+ sets or exactly one; other browsers; grace -> Expired after 24h in real use; DST zones in the browser; Enhance edge cases (cancel, error path, crops >= 900px, upscaler down).
@@ -132,6 +132,6 @@ Long-term form: `#f-days` / `#f-hours` (`F.daysLeft`/`F.hoursLeft`) are pre-fill
 - No per-card tracking, auth, or snooze/quiet hours.
 
 ## Next tasks
-- Confirm 0.4.2 and 0.5.2 with the user.
+- Confirm 0.4.2 with the user.
 - Possible: animate Expired/page below on stack toggle; keep status badges visible on buried cards; `DROP_HOUR` as env var; delete dead `.card.release` CSS; clean up orphaned images; sync `package.json` version.
 - The user wants to build a larger feature; scope undefined, ask them.
