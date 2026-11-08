@@ -144,7 +144,7 @@ app.post('/api/sets/:id/items/:itemId', (req, res) => {
   const b = req.body || {};
   const next = b.value !== undefined ? parseInt(b.value, 10) : it.owned + (parseInt(b.delta, 10) || 0);
   // Can't go above the cards released so far (daily/weekly); an existing higher count is kept, never lowered here
-  const cap = next > it.owned ? Math.max(it.owned, D.available(s, it, D.nowParts(TZ).date)) : it.total;
+  const cap = next > it.owned ? Math.max(it.owned, D.obtainable(s, it, D.nowParts(TZ).date)) : it.total;
   it.owned = Math.max(0, Math.min(cap, Number.isFinite(next) ? next : it.owned));
   save(); res.json(s);
 });

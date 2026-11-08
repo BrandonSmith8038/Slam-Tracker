@@ -50,7 +50,7 @@ When running locally, `.env` is not read by Node; export the variables in your s
 | `KEEP_EXPIRED` | `15` | How many sets to keep in the Expired section (newest by end date); older ones are deleted automatically along with their cover image. A number (0 = delete every expired set), or `off` to never delete |
 | `UPSCALER_URL` | _(empty)_ | URL of the upscaler container (`http://upscaler:3000` with the compose file); Enhance is off if empty |
 
-The drop time is not an environment variable: it is the `DROP_HOUR` constant (11) near the top of the drop helpers in `public/dates.js`. Change it there and rebuild.
+The drop times are not environment variables: they are the `DROP_HOUR` (11) and `UNLOCK_HOUR` (7) constants near the top of the drop helpers in `public/dates.js`. Change them there and rebuild.
 
 Upscaler container (`upscaler/`): `JOB_TIMEOUT_MIN` (default 45) kills a stuck job; `PORT` (3000).
 
@@ -62,6 +62,8 @@ Daily and weekly sets have a **Cards per drop** field (1 to 20, default 1). With
 
 ## Drop time
 Daily and weekly drops go live at 11:00 in `TZ`, not at midnight. Before 11:00 on a drop day, the app still measures you against the previous drops, so a daily set won't show a missing card until 11:00. From 11:00 until midnight the day's card shows the NEW CARD TODAY / Collected today badge, and a weekly set with a live card moves to the front of the Active section. How many days or weeks remain, and when a set ends, still follow calendar days.
+
+The game actually releases the card at about 07:00, so the **+** button unlocks the day's card at 07:00 (`UNLOCK_HOUR`). You can log it early without triggering anything: the badges and the weekly notification still wait for 11:00, and if you've already collected the card by then, no notification is sent.
 
 ## Card hover effect
 Live cards (not greyed-out grace-day cards and not Expired cards) have a layered shadow so they look slightly raised. When you hover one it lifts a few pixels, tilts up to about 5 degrees toward the pointer and shows a soft off-white glare that follows the pointer. The tilt is re-applied after every +1/-1 click and every 60-second refresh so the card doesn't snap flat while you are on it. Grace-day and Expired cards stay flat so their grey tint is unaffected.

@@ -38,6 +38,8 @@
   }
   // Drops go live at DROP_HOUR (11:00 in the app's timezone), not at midnight. Before then, today's drop hasn't happened yet.
   const DROP_HOUR = 11;
+  // The game releases the card around UNLOCK_HOUR (07:00); from then the "+" button lets you log it early.
+  const UNLOCK_HOUR = 7;
   let curTz = 'America/Phoenix'; // remembered by nowParts(), so server and browser both use the configured TZ
   const dropLive = today => { const n = partsAt(Date.now(), curTz); return today !== n.date || n.hour >= DROP_HOUR; };
   const dropDate = today => dropLive(today) ? today : addDays(today, -1);
@@ -48,6 +50,14 @@
   // Cards you should have by now for a chased item in a daily/weekly set (perDrop per released drop) minus what you own
   // Cards obtainable so far for a chased item: daily/weekly = perDrop per released drop (capped at the total); long-term = the total
   const available = (set, item, today) => set.type === 'longterm' ? item.total : Math.min(item.total, released(set, today) * perDrop(set));
+  // Cards you're allowed to log so far: like available(), but today's drop counts from UNLOCK_HOUR (when the game
+  // actually releases it), so you can log it before the DROP_HOUR badges and notification kick in.
+  const unlocked = today => { const n = partsAt(Date.now(), curTz); return today !== n.date || n.hour >= UNLOCK_HOUR; };
+  const obtainable = (set, item, today) => {
+    if (set.type === 'longterm') return item.total;
+    const upTo = unlocked(today) ? today : addDays(today, -1);
+    return Math.min(item.total, set.slots.filter(s => s.date <= upTo).length * perDrop(set));
+  };
   const itemMissing = (set, item, today) => set.type === 'longterm' ? 0 : Math.max(0, available(set, item, today) - item.owned);
   const remaining = (set, today) => set.slots.filter(s => windowEnd(set, s) >= today).length;
   // Each chased level/variation is one bar; overall = completed bars / bars.
@@ -66,5 +76,5 @@
   // Ended sets stay in Active (greyed out) for one more day, then count as archived (Expired section)
   const isArchived = (s, tz) => Date.now() >= endedAtMs(s, tz) + 864e5;
   const nowPartsTz = tz => { curTz = tz; return nowParts(tz); }; // also remembers the timezone for the drop-time helpers
-  return { label, partsAt, nowParts: nowPartsTz, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, available, itemMissing, remaining, progress, missing, endedAtMs, isArchived, todaySlot, DROP_HOUR };
+  return { label, partsAt, nowParts: nowPartsTz, diffDays, addDays, weekday, isExpired, minutesLeft, buildSlots, endDateFor, released, perDrop, available, obtainable, itemMissing, remaining, progress, missing, endedAtMs, isArchived, todaySlot, DROP_HOUR, UNLOCK_HOUR };
 });

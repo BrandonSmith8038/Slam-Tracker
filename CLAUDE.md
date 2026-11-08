@@ -25,7 +25,7 @@ No automated test suite. `node --check public/app.js` / `server.js` is the quick
 ## Configuration
 - ntfy `NTFY_SERVER` / `NTFY_TOPIC` / `NTFY_TOKEN` come from `.env`; compose uses `${NTFY_SERVER:-https://ntfy.sh}` etc. Notifications are off when `NTFY_TOPIC` is empty.
 - Env vars on `slam-tracker`: `TZ` (default America/Phoenix), `NOTIFY_TIME` (09:00 in compose), `PORT`, `DATA_DIR` (`/data`), `KEEP_EXPIRED` (default 15; `0` = delete all expired; non-number like `off` = never delete), `UPSCALER_URL=http://upscaler:3000` (without it Enhance is hidden; it went missing once, check it).
-- **Drop time is NOT an env var**: `DROP_HOUR = 11` in `public/dates.js`; changing it needs a rebuild. Making it an env var (server returns it via `/api/state`) was offered, no answer yet.
+- **Drop times are NOT env vars**: `DROP_HOUR = 11` and `UNLOCK_HOUR = 7` in `public/dates.js`; changing them needs a rebuild. The user chose to keep both hardcoded (0.5.4).
 - `data.json` is read only at startup and rewritten on every save, so hand edits need `docker stop slam-tracker` first. It is not writable by the user's normal account (probably root-owned); edit from the Unraid web terminal. Changes to `public/*` or `server.js` need a rebuild and a hard browser refresh (Ctrl+F5).
 
 ## Data model (`DATA_DIR/data.json`)
@@ -92,7 +92,7 @@ Long-term form: `#f-days` / `#f-hours` (`F.daysLeft`/`F.hoursLeft`) are pre-fill
 - Animation is FLIP in the `#stackToggle` click handler: record rects by `data-id`, flip `stacked`, `render()`, then `animate()` each card from `translate(dx,dy) scale(k)` to `none` over 450 ms, `cubic-bezier(.2,.8,.2,1)`. Deltas are divided by `ZOOM = .75`, which **must match the `zoom` on `.grid`** (also re-check the 420px width if it changes). Skipped when `calm.matches`.
 
 ### Other behavior
-- "+" cap (0.5.3): a bar's "+" button is `disabled` (faded, tooltip "Caught up: no more cards released yet" / "All cards collected") when `owned >= D.available(set, item, today)`; long-term's available = total. Re-enables on the 60s refresh after the 11:00 drop. The progress route also caps increases at `max(owned, available)` (never lowers an existing higher count; decreases are unaffected).
+- "+" cap (0.5.3): a bar's "+" button is `disabled` (faded, tooltip "Caught up: no more cards released yet" / "All cards collected") when `owned >= D.obtainable(set, item, today)`; long-term's obtainable = total. 0.5.4: `obtainable` is `available` but counts today's drop from `UNLOCK_HOUR` (07:00, the real in-game release) instead of `DROP_HOUR`, so "+" re-enables on the 60s refresh after 07:00 while badges/ntfy still wait for 11:00 (logging early makes the 11:00 weekly ntfy skip). The progress route also caps increases at `max(owned, obtainable)` (never lowers an existing higher count; decreases are unaffected).
 - Progress counts unique cards per chased level/variation (no per-card tracking). Overall = completed bars / chased bars. Every set must chase at least one level.
 - Daily/weekly: drops ARE the cards of the chased level/variation. Cards due = released drops x `perDrop`, capped at the item total (`D.available`; `itemMissing` = available - owned). If owned is lower, a red "N missing" badge shows (tooltip lists which) and behind rows get a reddish label. Card shows "X weeks/days remaining" (windows still open: daily = that day, weekly = release day + 6). Long-term shows "Ends <date> · Xd Yh left".
 - Start date is kept for daily/weekly so a late-added set can be backdated.
@@ -113,6 +113,7 @@ Long-term form: `#f-days` / `#f-hours` (`F.daysLeft`/`F.hoursLeft`) are pre-fill
 
 ## Status
 - 0.4.2 (auto-prune of expired sets beyond newest 15) awaits user confirmation once enough sets have expired.
+- 0.5.4 ("+" unlocks at 07:00 via `UNLOCK_HOUR`) confirmed by the user: logged today's card before 11:00.
 - 0.5.3 ("+" disabled when caught up on released cards) confirmed by the user.
 - 0.5.2 (weekly ntfy uses `D.todaySlot` in `runNotifications()`) confirmed by the user: the real 11:00 weekly ntfy arrives.
 - Files after the 0.5.1 edits were applied by hand and never re-read by Claude in the old chat; check `app.js`, `style.css`, `index.html` against the descriptions above before trusting them.

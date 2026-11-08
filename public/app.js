@@ -56,7 +56,7 @@ function card(s, expired) {
   // "+" is disabled once you own every card released so far (daily/weekly) or the whole total (long-term)
   const ctl = i => {
     if (expired) return '<div></div>';
-    const full = i.owned >= D.available(s, i, now.date);
+    const full = i.owned >= D.obtainable(s, i, now.date);
     const tip = full ? (i.owned >= i.total ? 'All cards collected' : 'Caught up: no more cards released yet') : '';
     return `<div class="ctl"><button data-act="dec" data-set="${s.id}" data-item="${i.id}">−</button><button data-act="inc" data-set="${s.id}" data-item="${i.id}"${full ? ` disabled title="${tip}"` : ''}>+</button></div>`;
   };
